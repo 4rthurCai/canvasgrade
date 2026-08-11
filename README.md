@@ -30,13 +30,14 @@ pip3 install "canvasgrade[web]"       # CLI + web GUI
 
 Python 3.11 or newer.
 
-While the tool is still being shaken out against a live Canvas, releases are marked as
-pre-releases. Plain `pip3 install canvasgrade` skips those by design, so ask for one
-explicitly:
-
-```bash
-pip3 install --pre "canvasgrade[all]"
-```
+> **This is a pre-release.** The tool has not yet been run against a live Canvas
+> instance. Every write is preceded by a preview and a confirmation, and `--dry-run`
+> touches nothing — use it first.
+>
+> Note that while `0.1.0rc1` is the *only* published version, plain
+> `pip3 install canvasgrade` installs it: pip falls back to pre-releases when no
+> stable version exists. Once `0.1.0` ships, a plain install will prefer the stable
+> one and `--pre` will be needed to opt back in.
 
 To run the very latest instead of the last release:
 
