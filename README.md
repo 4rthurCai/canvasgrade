@@ -33,25 +33,23 @@ ends with somebody reshaping a spreadsheet by hand.
 canvasgrade reads the sheet you already have, and tells you exactly what it made of
 every column before it writes anything.
 
-```
-Detected columns
-┏━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━┳━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
-┃ Column            ┃ Role      ┃ Max ┃ Why                         ┃
-┡━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━╇━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┩
-│ Student           │ name      │     │ header names a student      │
-│ ID                │ canvas_id │     │ header is a Canvas user id  │
-│ Design (10)       │ criterion │  10 │ header declares a max of 10 │
-│ Tests (20)        │ criterion │  20 │ header declares a max of 20 │
-│ Code Quality (35) │ criterion │  35 │ header declares a max of 35 │
-│ Docs (5)          │ criterion │   5 │ header declares a max of 5  │
-│ Total (70)        │ total     │  70 │ header contains 'total'     │
-└───────────────────┴───────────┴─────┴─────────────────────────────┘
+`canvasgrade inspect grades.xlsx`:
 
-44 students, 44 with a total in the sheet from 44 rows in the file
-4 criteria worth 70 points in total
-```
+| Column | Role | Max | Why |
+|---|---|---:|---|
+| `Student` | name | | header names a student |
+| `ID` | canvas_id | | header is a Canvas user id |
+| `Design (10)` | **criterion** | 10 | header declares a max of 10 |
+| `Tests (20)` | **criterion** | 20 | header declares a max of 20 |
+| `Code Quality (35)` | **criterion** | 35 | header declares a max of 35 |
+| `Docs (5)` | **criterion** | 5 | header declares a max of 5 |
+| `Total (70)` | total | 70 | header contains 'total' |
 
-Every decision carries its reason, and every one of them can be overridden.
+> 44 students, 44 with a total in the sheet from 44 rows in the file
+> 4 criteria worth 70 points in total
+
+Every decision carries its reason, and every one of them can be overridden. `inspect`
+touches no network.
 
 ## Look before you write
 
@@ -168,8 +166,7 @@ Rules worth knowing:
 - **A row with a name but no id and no scores is a team header.** The rows below it
   inherit that team name.
 
-`canvasgrade inspect <file>` shows every decision and its reason, without touching the
-network.
+Run `canvasgrade inspect <file>` on your own sheet to see which rule each column hit.
 
 ## One sheet, several assignments
 
