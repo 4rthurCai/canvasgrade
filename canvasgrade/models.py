@@ -41,6 +41,9 @@ class ColumnSpec:
     points: float | None = None
     #: For COMMENT columns: the ``name`` of the criterion column it annotates.
     target: str | None = None
+    #: Overrides the criterion name students see. Defaults to the header with its
+    #: max-score marker stripped, which is not always a sentence worth showing.
+    description: str | None = None
     #: True when the role was guessed, False when the user set it explicitly.
     inferred: bool = True
     #: Why the detector chose this role - shown in the CLI table and the GUI.
@@ -52,10 +55,19 @@ class ColumnSpec:
         *,
         points: float | None = None,
         target: str | None = None,
+        description: str | None = None,
         reason: str = "set by user",
     ) -> ColumnSpec:
         """Return a copy carrying a user-supplied role."""
-        return replace(self, role=role, points=points, target=target, inferred=False, reason=reason)
+        return replace(
+            self,
+            role=role,
+            points=points,
+            target=target,
+            description=description,
+            inferred=False,
+            reason=reason,
+        )
 
 
 @dataclass(frozen=True)
@@ -92,13 +104,16 @@ class SheetMapping:
         *,
         points: float | None = None,
         target: str | None = None,
+        description: str | None = None,
         reason: str = "set by user",
     ) -> SheetMapping:
         """Return a new mapping with one column's role replaced."""
         if self.get(name) is None:
             raise KeyError(f"No column named {name!r} in this sheet")
         columns = tuple(
-            c.with_role(role, points=points, target=target, reason=reason) if c.name == name else c
+            c.with_role(role, points=points, target=target, description=description, reason=reason)
+            if c.name == name
+            else c
             for c in self.columns
         )
         return SheetMapping(columns=columns)

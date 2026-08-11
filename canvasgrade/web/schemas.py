@@ -9,6 +9,7 @@ from __future__ import annotations
 from pydantic import BaseModel, Field
 
 from canvasgrade.models import ColumnRole, GradePlan, SheetMapping
+from canvasgrade.sheet.detect import strip_points
 
 
 class SessionInfo(BaseModel):
@@ -46,6 +47,8 @@ class ColumnOut(BaseModel):
     role: str
     points: float | None = None
     target: str | None = None
+    #: The criterion name students will see, whether derived or overridden.
+    description: str | None = None
     inferred: bool = True
     reason: str = ""
 
@@ -67,6 +70,7 @@ class ColumnOverrideIn(BaseModel):
     role: ColumnRole
     points: float | None = None
     target: str | None = None
+    description: str | None = None
 
 
 class OptionsIn(BaseModel):
@@ -157,6 +161,7 @@ def columns_out(mapping: SheetMapping) -> list[ColumnOut]:
             role=column.role.value,
             points=column.points,
             target=column.target,
+            description=column.description or (strip_points(column.name) or column.name),
             inferred=column.inferred,
             reason=column.reason,
         )

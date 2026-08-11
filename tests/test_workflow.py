@@ -73,6 +73,51 @@ class TestLoadSheet:
         with pytest.raises(MappingError, match="Columns currently read as a total"):
             load_sheet(sheet_request(gradebook_path, total_column="Nope"))
 
+    def test_a_criterion_can_be_renamed(self, gradebook_path) -> None:
+        # The header is written for the marker; the criterion name is what students see.
+        from canvasgrade.grading.rubric import build_rubric
+
+        prepared = load_sheet(
+            sheet_request(
+                gradebook_path,
+                include=["M1 *"],
+                overrides=(
+                    ColumnOverride(
+                        name="M1 Design (10)",
+                        role=ColumnRole.CRITERION,
+                        points=10,
+                        description="Architecture & design decisions",
+                    ),
+                ),
+            )
+        )
+        spec = build_rubric(prepared.mapping, "M1")
+        assert [c.description for c in spec.criteria] == [
+            "Architecture & design decisions",
+            "M1 Tests",
+        ]
+        assert spec.total_points == 30
+
+    def test_renaming_does_not_disturb_the_score_lookup(self, gradebook_path, roster) -> None:
+        # Scores join on the column name, not the display name.
+        from canvasgrade.grading.plan import build_plan
+        from canvasgrade.grading.rubric import build_rubric
+
+        prepared = load_sheet(
+            sheet_request(
+                gradebook_path,
+                include=["M1 *"],
+                overrides=(
+                    ColumnOverride(name="M1 Design (10)", role=ColumnRole.CRITERION, points=10, description="Renamed"),
+                ),
+            )
+        )
+        spec = build_rubric(prepared.mapping, "M1")
+        bound = spec.with_ids({c.description: f"_{i}" for i, c in enumerate(spec.criteria, 1)}, rubric_id=1)
+        plan = build_plan(prepared.rows, rubric=bound, roster=roster)
+        ada = next(e for e in plan.entries if e.label == "Ada Lovelace")
+        assert dict(ada.criterion_points)["_1"] == 8.0
+
     def test_a_sheet_with_no_students_is_rejected(self, tmp_path) -> None:
         path = tmp_path / "headers-only.csv"
         path.write_text("Student,ID,Design (10)\n,,\n")

@@ -122,3 +122,18 @@ class TestRubricPicker:
         page = client.get("/static/index.html").text
         assert '<select id="rubric-id">' in page
         assert 'type="number" id="rubric-id"' not in page
+
+
+class TestRubricEditing:
+    def test_the_mapping_table_exposes_the_criterion_name(self, client) -> None:
+        page = client.get("/static/index.html").text
+        assert "Criterion name" in page
+
+    def test_the_preview_has_a_rubric_table_of_its_own(self, client) -> None:
+        # Criteria used to appear only as truncated column headers of the grades table.
+        page = client.get("/static/index.html").text
+        assert 'id="rubric-preview"' in page
+
+    def test_upload_reports_the_name_each_criterion_will_carry(self, uploaded) -> None:
+        criteria = {c["name"]: c["description"] for c in uploaded["columns"] if c["role"] == "criterion"}
+        assert criteria["M1 Design (10)"] == "M1 Design"

@@ -38,6 +38,7 @@ class ColumnOverride:
     role: ColumnRole
     points: float | None = None
     target: str | None = None
+    description: str | None = None
 
 
 @dataclass(frozen=True)
@@ -103,7 +104,13 @@ def load_sheet(request: SheetRequest) -> PreparedSheet:
     data = read_sheet(request.path, sheet=request.sheet, has_header=request.has_header)
     mapping = detect_mapping(data.frame, has_header=request.has_header)
     for override in request.overrides:
-        mapping = mapping.override(override.name, override.role, points=override.points, target=override.target)
+        mapping = mapping.override(
+            override.name,
+            override.role,
+            points=override.points,
+            target=override.target,
+            description=override.description,
+        )
     if request.total_column:
         mapping = _force_total_column(mapping, request.total_column)
     mapping = filter_criteria(mapping, include=request.include, exclude=request.exclude)

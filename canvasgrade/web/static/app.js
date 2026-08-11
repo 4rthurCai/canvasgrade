@@ -161,8 +161,17 @@ function matchesInclude(name) {
   return patterns.some((pattern) => globToRegExp(pattern).test(name));
 }
 
+// What the columns look like once the user's edits are applied - the server does the
+// same thing, so the summary stays honest as you type.
+function effectiveColumns() {
+  return state.columns.map((column) => {
+    const override = state.overrides.get(column.name);
+    return override ? { ...column, ...override } : column;
+  });
+}
+
 function effectiveCriteria() {
-  return state.columns.filter((c) => c.role === "criterion" && matchesInclude(c.name));
+  return effectiveColumns().filter((c) => c.role === "criterion" && matchesInclude(c.name));
 }
 
 function renderDetected() {
@@ -226,6 +235,21 @@ function renderColumns(columns) {
     roleCell.append(select);
     tr.append(roleCell);
 
+    // The criterion name is what students see; the header is often not phrased for them.
+    const nameCell = document.createElement("td");
+    if (column.role === "criterion") {
+      const rename = document.createElement("input");
+      rename.type = "text";
+      rename.value = column.description || "";
+      rename.addEventListener("change", () =>
+        setOverride(column, select.value, criteriaNames, undefined, rename.value)
+      );
+      nameCell.append(rename);
+    } else {
+      nameCell.innerHTML = '<span class="muted">—</span>';
+    }
+    tr.append(nameCell);
+
     const points = document.createElement("td");
     points.className = "num";
     if (column.role === "criterion" || column.role === "total") {
@@ -249,12 +273,23 @@ function renderColumns(columns) {
   }
 }
 
-function setOverride(column, role, criteriaNames, points) {
+function setOverride(column, role, criteriaNames, points, description) {
+  // Overrides replace the detector's answer wholesale, so carry forward whatever the
+  // user is not editing right now - otherwise renaming a criterion clears its max.
+  const previous = state.overrides.get(column.name) || {};
   const override = { name: column.name, role };
+
   if (points !== undefined && points !== "") override.points = Number(points);
+  else if (previous.points != null) override.points = previous.points;
   else if (column.points != null && (role === "criterion" || role === "total")) override.points = column.points;
+
+  if (description !== undefined) override.description = description.trim() || null;
+  else if (previous.description) override.description = previous.description;
+
   if (role === "comment") override.target = column.target || criteriaNames[0] || null;
+
   state.overrides.set(column.name, override);
+  renderDetected();
   $("plan-section").hidden = true;
   $("result-section").hidden = true;
 }
@@ -378,6 +413,8 @@ function renderPlan(plan) {
     plan.rubric_total != null ? stat(plan.rubric_total, "rubric points", "") : "",
   ].join("");
 
+  renderRubricPreview(plan);
+
   const head = $("entries").querySelector("thead");
   const body = $("entries").querySelector("tbody");
   const criteria = plan.criteria || [];
@@ -415,6 +452,43 @@ function renderPlan(plan) {
 
   $("push-btn").disabled = !plan.pushable;
   $("push-status").textContent = plan.pushable ? "" : "Fix the errors above before pushing.";
+}
+
+// The rubric is the thing being created on Canvas, so show it as a rubric rather than
+// leaving it implied by the column headers of the grades table.
+function renderRubricPreview(plan) {
+  const wrap = $("rubric-preview-wrap");
+  const criteria = plan.criteria || [];
+  if (!criteria.length) {
+    wrap.hidden = true;
+    return;
+  }
+  wrap.hidden = false;
+
+  const columns = effectiveCriteria();
+  const summary = wrap.querySelector("summary");
+  const total = plan.rubric_total == null ? "" : ` · ${plan.rubric_total} points`;
+  const title = plan.rubric_title ? `“${escapeHtml(plan.rubric_title)}”` : "The rubric";
+  const pending = criteria.some((c) => (c.criterion_id || "").startsWith("_preview_"));
+  summary.innerHTML =
+    `${title} — ${criteria.length} criteria${total}` +
+    (pending ? ' <span class="pill">will be created</span>' : ' <span class="pill">already on Canvas</span>');
+
+  const body = $("rubric-preview").querySelector("tbody");
+  body.innerHTML =
+    criteria
+      .map((criterion, index) => {
+        const id = criterion.criterion_id || "";
+        const shown = id.startsWith("_preview_") ? '<span class="muted">new</span>' : `<code>${escapeHtml(id)}</code>`;
+        const from = columns[index] ? escapeHtml(short(columns[index].name)) : "";
+        return (
+          `<tr><td class="num muted">${index + 1}</td><td>${escapeHtml(criterion.description)}</td>` +
+          `<td class="num">${criterion.points}</td><td>${shown}</td>` +
+          `<td class="muted" title="${from}">${from}</td></tr>`
+        );
+      })
+      .join("") +
+    `<tr><td></td><td><b>total</b></td><td class="num"><b>${plan.rubric_total ?? ""}</b></td><td></td><td></td></tr>`;
 }
 
 function stat(value, label, tone) {

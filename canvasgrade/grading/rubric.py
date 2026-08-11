@@ -34,7 +34,7 @@ def build_rubric(mapping: SheetMapping, title: str) -> RubricSpec:
         listed = ", ".join(repr(name) for name in missing[:5])
         raise MappingError(f"These criterion columns have no max score: {listed}")
 
-    descriptions = [strip_points(c.name) or c.name for c in columns]
+    descriptions = [c.description or strip_points(c.name) or c.name for c in columns]
     duplicates = [text for text, count in Counter(map(normalise, descriptions)).items() if count > 1]
     if duplicates:
         raise MappingError(

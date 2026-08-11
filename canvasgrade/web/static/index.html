@@ -149,13 +149,23 @@ details summary { cursor: pointer; color: var(--muted); font-size: 13px; padding
           <div class="muted mono" id="detected"></div>
         </div>
       </div>
-      <details style="margin-top:12px">
+      <details style="margin-top:12px" open>
         <summary>Column mapping — change anything the detector got wrong</summary>
         <div class="scroll" style="margin-top:8px">
           <table id="columns"><thead>
-            <tr><th>Column</th><th style="width:130px">Role</th><th class="num" style="width:80px">Max</th><th>Why</th></tr>
+            <tr>
+              <th>Column</th>
+              <th style="width:120px">Role</th>
+              <th style="width:170px">Criterion name</th>
+              <th class="num" style="width:72px">Max</th>
+              <th>Why</th>
+            </tr>
           </thead><tbody></tbody></table>
         </div>
+        <p class="muted" style="font-size:12px;margin:8px 2px 0">
+          The criterion name is what students see on the rubric. It defaults to the
+          header with its max-score marker removed.
+        </p>
       </details>
     </div>
   </section>
@@ -206,6 +216,22 @@ details summary { cursor: pointer; color: var(--muted); font-size: 13px; padding
     <h2><span class="step">4</span>Preview</h2>
     <div id="plan-notes"></div>
     <div class="summary" id="plan-summary"></div>
+
+    <details id="rubric-preview-wrap" style="margin-bottom:14px" open>
+      <summary>The rubric that will be used</summary>
+      <div class="scroll" style="margin-top:8px">
+        <table id="rubric-preview"><thead>
+          <tr>
+            <th style="width:36px" class="num">#</th>
+            <th>Criterion</th>
+            <th class="num" style="width:72px">Max</th>
+            <th style="width:110px">Canvas id</th>
+            <th style="width:96px">From column</th>
+          </tr>
+        </thead><tbody></tbody></table>
+      </div>
+    </details>
+
     <div class="scroll"><table id="entries"><thead></thead><tbody></tbody></table></div>
     <div id="plan-issues" style="margin-top:14px"></div>
     <div class="actions">
