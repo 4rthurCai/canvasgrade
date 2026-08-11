@@ -4,7 +4,9 @@ build-backend = "hatchling.build"
 
 [project]
 name = "canvasgrade"
-version = "0.1.0"
+# Single source of truth: canvasgrade/__init__.py. Two copies drift, and the one that
+# is wrong is always the one users see.
+dynamic = ["version"]
 description = "Build Canvas rubrics from a spreadsheet and push grades back, in one step."
 readme = "README.md"
 requires-python = ">=3.11"
@@ -47,6 +49,9 @@ canvasgrade = "canvasgrade.cli:run"
 [project.urls]
 Source = "https://github.com/4rthurCai/canvasgrade"
 Issues = "https://github.com/4rthurCai/canvasgrade/issues"
+
+[tool.hatch.version]
+path = "canvasgrade/__init__.py"
 
 [tool.hatch.build.targets.wheel]
 packages = ["canvasgrade"]

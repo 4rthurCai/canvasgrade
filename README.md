@@ -23,12 +23,16 @@ made of every column before it writes anything.
 ## Install
 
 ```bash
-pip install "canvasgrade[all]"        # CLI + web GUI + plots
-pip install canvasgrade               # CLI only
-pip install "canvasgrade[web]"        # CLI + web GUI
+pip3 install "canvasgrade[all]"       # CLI + web GUI + plots
+pip3 install canvasgrade              # CLI only
+pip3 install "canvasgrade[web]"       # CLI + web GUI
 ```
 
-Python 3.11 or newer.
+Python 3.11 or newer. To run the very latest instead of the last release:
+
+```bash
+pip3 install "git+https://github.com/4rthurCai/canvasgrade#egg=canvasgrade[all]"
+```
 
 ## Set up credentials
 
