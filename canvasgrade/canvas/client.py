@@ -37,6 +37,16 @@ class CourseInfo:
 
 
 @dataclass(frozen=True)
+class RubricInfo:
+    """A rubric in the course, flattened enough to choose between them."""
+
+    id: int
+    title: str
+    criteria: int = 0
+    points: float | None = None
+
+
+@dataclass(frozen=True)
 class AssignmentInfo:
     """An assignment, flattened to the fields we display."""
 
@@ -129,6 +139,27 @@ class CanvasSession:
             return course.get_assignment(assignment_id)
         except API_ERRORS as exc:
             raise _explain(exc, f"opening assignment {assignment_id}") from exc
+
+    def rubrics(self, course: Any) -> tuple[RubricInfo, ...]:
+        """List the course's rubrics, so nobody has to dig an id out of DevTools."""
+        try:
+            found = list(course.get_rubrics(per_page=100))
+        except API_ERRORS as exc:
+            raise _explain(exc, f"listing rubrics in course {course.id}") from exc
+
+        infos: list[RubricInfo] = []
+        for rubric in found:
+            data = getattr(rubric, "data", None)
+            points = getattr(rubric, "points_possible", None)
+            infos.append(
+                RubricInfo(
+                    id=int(rubric.id),
+                    title=str(getattr(rubric, "title", f"rubric {rubric.id}")),
+                    criteria=len(data) if isinstance(data, list) else 0,
+                    points=float(points) if points is not None else None,
+                )
+            )
+        return tuple(infos)
 
     def speedgrader_url(self, course_id: int, assignment_id: int) -> str:
         base = self._profile.api_url.rstrip("/")

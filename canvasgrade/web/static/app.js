@@ -265,6 +265,37 @@ function onRubricModeChange() {
   const mode = $("rubric-mode").value;
   $("rubric-id-field").hidden = mode !== "existing";
   $("rubric-title-field").hidden = mode !== "create";
+  if (mode === "existing") loadRubrics();
+}
+
+// Offering a dropdown rather than a number box is the whole point: nobody should have
+// to dig a rubric id out of the browser's dev tools.
+async function loadRubrics() {
+  const courseId = $("course").value;
+  const select = $("rubric-id");
+  if (!courseId) {
+    select.innerHTML = '<option value="">pick a course first</option>';
+    return;
+  }
+  select.innerHTML = '<option value="">loading…</option>';
+  try {
+    const rubrics = await api(`/api/courses/${courseId}/rubrics`);
+    if (!rubrics.length) {
+      select.innerHTML = '<option value="">this course has no rubrics</option>';
+      return;
+    }
+    select.innerHTML = '<option value="">select a rubric…</option>';
+    for (const rubric of rubrics) {
+      const option = document.createElement("option");
+      option.value = rubric.id;
+      const points = rubric.points == null ? "?" : rubric.points;
+      option.textContent = `${rubric.title} — ${rubric.criteria} criteria, ${points} pts (id ${rubric.id})`;
+      select.append(option);
+    }
+  } catch (error) {
+    select.innerHTML = '<option value="">failed to load</option>';
+    fatal(error.message);
+  }
 }
 
 function payload() {

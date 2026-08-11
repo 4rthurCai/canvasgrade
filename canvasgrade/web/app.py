@@ -106,6 +106,14 @@ def create_app(profile: Profile) -> FastAPI:
             for a in session.assignments(course)
         ]
 
+    @app.get("/api/courses/{course_id}/rubrics", response_model=list[api.RubricOut])
+    def read_rubrics(course_id: int) -> list[api.RubricOut]:
+        course = session.course(course_id)
+        return [
+            api.RubricOut(id=r.id, title=r.title, criteria=r.criteria, points=r.points)
+            for r in session.rubrics(course)
+        ]
+
     @app.post("/api/uploads", response_model=api.UploadOut)
     async def create_upload(file: UploadFile, sheet: str = "0", has_header: bool = True) -> api.UploadOut:
         try:

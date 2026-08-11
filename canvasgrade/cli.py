@@ -324,6 +324,25 @@ def courses(profile_name: str | None, api_url: str | None, api_key: str | None, 
 
 @main.command()
 @connection_options
+def rubrics(profile_name: str | None, api_url: str | None, api_key: str | None, **ids: Any) -> None:
+    """List a course's rubrics and their ids, for --rubric-id."""
+    out = render.console()
+    session, profile = _session(profile_name, api_url, api_key, **ids)
+    from rich.table import Table
+
+    table = Table(header_style="bold")
+    table.add_column("id", justify="right")
+    table.add_column("Rubric")
+    table.add_column("Criteria", justify="right")
+    table.add_column("Points", justify="right")
+    for item in session.rubrics(session.course(profile.require_course())):
+        points = f"{item.points:g}" if item.points is not None else "-"
+        table.add_row(str(item.id), item.title, str(item.criteria), points)
+    out.print(table)
+
+
+@main.command()
+@connection_options
 def assignments(profile_name: str | None, api_url: str | None, api_key: str | None, **ids: Any) -> None:
     """List a course's assignments, their ids, and whether a rubric is attached."""
     out = render.console()

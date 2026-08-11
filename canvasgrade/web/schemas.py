@@ -33,6 +33,13 @@ class AssignmentOut(BaseModel):
     rubric_id: int | None = None
 
 
+class RubricOut(BaseModel):
+    id: int
+    title: str
+    criteria: int = 0
+    points: float | None = None
+
+
 class ColumnOut(BaseModel):
     name: str
     index: int

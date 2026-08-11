@@ -101,3 +101,24 @@ class TestUploadStore:
         upload = store.add("../../etc/passwd.csv", b"a\n1\n")
         assert upload.path.parent == store.root
         store.close()
+
+
+class TestRubricPicker:
+    def test_the_endpoint_exists_for_the_dropdown(self, client, monkeypatch) -> None:
+        from canvasgrade.canvas.client import CanvasSession, RubricInfo
+
+        monkeypatch.setattr(
+            CanvasSession,
+            "rubrics",
+            lambda self, course: (RubricInfo(id=7, title="HW1", criteria=2, points=15.0),),
+        )
+        monkeypatch.setattr(CanvasSession, "course", lambda self, cid: object())
+        response = client.get("/api/courses/92433/rubrics")
+        assert response.status_code == 200
+        assert response.json() == [{"id": 7, "title": "HW1", "criteria": 2, "points": 15.0}]
+
+    def test_the_page_offers_a_dropdown_not_a_number_box(self, client) -> None:
+        # Typing a rubric id is the dev-tools hunt this tool exists to remove.
+        page = client.get("/static/index.html").text
+        assert '<select id="rubric-id">' in page
+        assert 'type="number" id="rubric-id"' not in page
