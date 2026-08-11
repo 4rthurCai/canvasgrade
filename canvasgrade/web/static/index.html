@@ -1,0 +1,225 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>canvasgrade</title>
+<style>
+:root {
+  --bg: #f6f7f9; --panel: #ffffff; --ink: #1b1f24; --muted: #6b7480;
+  --line: #dfe3e8; --accent: #1f4ea1; --ok: #1f7a45; --warn: #a8620a; --err: #b3261e;
+  --chip: #eef1f5; --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #14171a; --panel: #1c2024; --ink: #e6e9ec; --muted: #98a2ad;
+    --line: #2c3238; --accent: #7aa5e8; --ok: #5fbf85; --warn: #e0a458; --err: #ef7b72;
+    --chip: #252b31;
+  }
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; background: var(--bg); color: var(--ink);
+  font: 14px/1.55 system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+header {
+  display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap;
+  padding: 18px 24px; border-bottom: 1px solid var(--line); background: var(--panel);
+}
+header h1 { margin: 0; font-size: 17px; letter-spacing: -0.01em; }
+header .who { color: var(--muted); font-size: 13px; }
+main { max-width: 1080px; margin: 0 auto; padding: 24px; }
+section {
+  background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+  padding: 18px 20px; margin-bottom: 18px;
+}
+section[hidden] { display: none; }
+h2 {
+  margin: 0 0 14px; font-size: 13px; text-transform: uppercase;
+  letter-spacing: 0.07em; color: var(--muted); font-weight: 600;
+}
+h2 .step {
+  display: inline-block; width: 20px; height: 20px; line-height: 20px; text-align: center;
+  border-radius: 50%; background: var(--chip); color: var(--ink); margin-right: 8px; font-size: 11px;
+}
+.row { display: flex; gap: 14px; flex-wrap: wrap; align-items: flex-end; }
+.field { display: flex; flex-direction: column; gap: 5px; min-width: 220px; flex: 1; }
+label { font-size: 12px; color: var(--muted); }
+select, input[type=text], input[type=number] {
+  font: inherit; padding: 7px 9px; border: 1px solid var(--line);
+  border-radius: 6px; background: var(--bg); color: var(--ink); width: 100%;
+}
+button {
+  font: inherit; font-weight: 600; padding: 8px 16px; border-radius: 6px;
+  border: 1px solid var(--accent); background: var(--accent); color: #fff; cursor: pointer;
+}
+button.ghost { background: transparent; color: var(--accent); }
+button:disabled { opacity: .45; cursor: not-allowed; }
+button.danger { background: var(--err); border-color: var(--err); }
+#drop {
+  border: 2px dashed var(--line); border-radius: 10px; padding: 30px; text-align: center;
+  color: var(--muted); cursor: pointer; transition: border-color .15s, background .15s;
+}
+#drop.over { border-color: var(--accent); background: var(--chip); }
+#drop strong { color: var(--ink); }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+th { color: var(--muted); font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: .05em; }
+td.num, th.num { text-align: right; font-family: var(--mono); }
+.scroll { max-height: 380px; overflow: auto; border: 1px solid var(--line); border-radius: 8px; }
+.mono { font-family: var(--mono); }
+.muted { color: var(--muted); }
+.pill {
+  display: inline-block; padding: 1px 7px; border-radius: 20px; font-size: 11px;
+  background: var(--chip); color: var(--muted); font-family: var(--mono);
+}
+.pill.criterion { background: rgba(31,78,161,.14); color: var(--accent); }
+.pill.total { background: rgba(168,98,10,.16); color: var(--warn); }
+td select { padding: 3px 6px; font-size: 12px; }
+td input { padding: 3px 6px; font-size: 12px; }
+.issue { padding: 5px 0; border-bottom: 1px solid var(--line); font-size: 13px; }
+.issue:last-child { border-bottom: 0; }
+.issue .lvl { font-family: var(--mono); font-size: 11px; padding: 1px 6px; border-radius: 4px; margin-right: 8px; }
+.lvl.error { background: rgba(179,38,30,.15); color: var(--err); }
+.lvl.warning { background: rgba(168,98,10,.16); color: var(--warn); }
+.summary { display: flex; gap: 22px; flex-wrap: wrap; margin-bottom: 14px; }
+.stat { display: flex; flex-direction: column; }
+.stat b { font-size: 22px; font-family: var(--mono); font-weight: 600; line-height: 1.2; }
+.stat span { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
+.stat.ok b { color: var(--ok); } .stat.warn b { color: var(--warn); } .stat.err b { color: var(--err); }
+.banner { padding: 10px 12px; border-radius: 7px; margin-bottom: 12px; font-size: 13px; }
+.banner.err { background: rgba(179,38,30,.12); color: var(--err); }
+.banner.ok { background: rgba(31,122,69,.12); color: var(--ok); }
+.banner.info { background: var(--chip); color: var(--muted); }
+.checks { display: flex; gap: 18px; flex-wrap: wrap; margin-top: 12px; }
+.checks label { display: flex; gap: 6px; align-items: center; color: var(--ink); font-size: 13px; }
+.checks input { width: auto; }
+.actions { display: flex; gap: 10px; align-items: center; margin-top: 16px; }
+.spinner {
+  width: 14px; height: 14px; border: 2px solid var(--line); border-top-color: var(--accent);
+  border-radius: 50%; animation: spin .7s linear infinite; display: inline-block;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+details summary { cursor: pointer; color: var(--muted); font-size: 13px; padding: 6px 0; }
+</style>
+</head>
+<body>
+<header>
+  <h1>canvasgrade</h1>
+  <span class="who" id="who">connecting…</span>
+</header>
+
+<main>
+  <div id="fatal" class="banner err" hidden></div>
+
+  <section>
+    <h2><span class="step">1</span>Assignment</h2>
+    <div class="row">
+      <div class="field">
+        <label for="course">Course</label>
+        <select id="course"><option value="">loading…</option></select>
+      </div>
+      <div class="field">
+        <label for="assignment">Assignment</label>
+        <select id="assignment" disabled><option value="">pick a course first</option></select>
+      </div>
+    </div>
+    <div class="muted" id="assignment-info" style="margin-top:10px"></div>
+  </section>
+
+  <section>
+    <h2><span class="step">2</span>Spreadsheet</h2>
+    <div id="drop">
+      <strong>Drop your gradebook here</strong><br />
+      <span>or click to choose a .xlsx or .csv file</span>
+      <input type="file" id="file" accept=".csv,.tsv,.xlsx,.xls,.xlsm" hidden />
+    </div>
+    <div id="sheet-meta" hidden style="margin-top:14px">
+      <div class="row">
+        <div class="field" style="max-width:280px">
+          <label for="sheet">Worksheet</label>
+          <select id="sheet"></select>
+        </div>
+        <div class="field" style="max-width:280px">
+          <label for="include" title="Glob patterns matched against column headers">Only these criteria (optional)</label>
+          <input type="text" id="include" placeholder="e.g. P1M1 *" />
+        </div>
+        <div class="field">
+          <label>Detected</label>
+          <div class="muted mono" id="detected"></div>
+        </div>
+      </div>
+      <details style="margin-top:12px">
+        <summary>Column mapping — change anything the detector got wrong</summary>
+        <div class="scroll" style="margin-top:8px">
+          <table id="columns"><thead>
+            <tr><th>Column</th><th style="width:130px">Role</th><th class="num" style="width:80px">Max</th><th>Why</th></tr>
+          </thead><tbody></tbody></table>
+        </div>
+      </details>
+    </div>
+  </section>
+
+  <section id="options-section" hidden>
+    <h2><span class="step">3</span>Rubric &amp; totals</h2>
+    <div class="row">
+      <div class="field">
+        <label for="rubric-mode">Rubric</label>
+        <select id="rubric-mode">
+          <option value="attached">Use the rubric already on this assignment</option>
+          <option value="create">Create a new rubric from my column headers</option>
+          <option value="existing">Use an existing rubric by id</option>
+          <option value="none">No rubric — push totals only</option>
+        </select>
+      </div>
+      <div class="field" id="rubric-id-field" hidden style="max-width:180px">
+        <label for="rubric-id">Rubric id</label>
+        <input type="number" id="rubric-id" />
+      </div>
+      <div class="field" id="rubric-title-field" hidden>
+        <label for="rubric-title">New rubric title</label>
+        <input type="text" id="rubric-title" placeholder="defaults to the assignment name" />
+      </div>
+      <div class="field" style="max-width:200px">
+        <label for="total">Assignment total</label>
+        <select id="total">
+          <option value="auto">From the sheet, else sum</option>
+          <option value="sum">Always sum the criteria</option>
+          <option value="sheet">Always use the total column</option>
+        </select>
+      </div>
+    </div>
+    <div class="checks">
+      <label><input type="checkbox" id="apply-ratio" /> Multiply by the ratio column</label>
+      <label><input type="checkbox" id="add-comment" /> Leave a submission comment</label>
+      <label><input type="checkbox" id="missing-zero" checked /> Blank criteria count as 0</label>
+      <label><input type="checkbox" id="clamp" checked /> Cap scores at the criterion max</label>
+      <label><input type="checkbox" id="use-for-grading" /> Let the rubric total set the grade</label>
+    </div>
+    <div class="actions">
+      <button id="preview-btn">Preview changes</button>
+      <span id="preview-status" class="muted"></span>
+    </div>
+  </section>
+
+  <section id="plan-section" hidden>
+    <h2><span class="step">4</span>Preview</h2>
+    <div id="plan-notes"></div>
+    <div class="summary" id="plan-summary"></div>
+    <div class="scroll"><table id="entries"><thead></thead><tbody></tbody></table></div>
+    <div id="plan-issues" style="margin-top:14px"></div>
+    <div class="actions">
+      <button id="push-btn" disabled>Push to Canvas</button>
+      <span id="push-status" class="muted"></span>
+    </div>
+  </section>
+
+  <section id="result-section" hidden>
+    <h2><span class="step">5</span>Result</h2>
+    <div id="result"></div>
+  </section>
+</main>
+
+<script src="/static/app.js"></script>
+</body>
+</html>
