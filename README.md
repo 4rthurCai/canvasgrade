@@ -28,7 +28,17 @@ pip3 install canvasgrade              # CLI only
 pip3 install "canvasgrade[web]"       # CLI + web GUI
 ```
 
-Python 3.11 or newer. To run the very latest instead of the last release:
+Python 3.11 or newer.
+
+While the tool is still being shaken out against a live Canvas, releases are marked as
+pre-releases. Plain `pip3 install canvasgrade` skips those by design, so ask for one
+explicitly:
+
+```bash
+pip3 install --pre "canvasgrade[all]"
+```
+
+To run the very latest instead of the last release:
 
 ```bash
 pip3 install "git+https://github.com/4rthurCai/canvasgrade#egg=canvasgrade[all]"
