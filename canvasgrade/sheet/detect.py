@@ -153,6 +153,16 @@ def _classify(header: str, index: int, series: pd.Series, explicit_points_presen
     def spec(role: ColumnRole, reason: str, **kwargs: object) -> ColumnSpec:
         return ColumnSpec(name=header, index=index, role=role, reason=reason, **kwargs)  # type: ignore[arg-type]
 
+    # An explicit maximum settles it: a column worth 5 points is something being
+    # marked, whatever else its name happens to contain. Without this, a criterion
+    # like "Bug reports (team) [5]" is read as the team column and silently dropped.
+    if points is not None:
+        matched = _contains(text, TOTAL_TOKENS)
+        if matched:
+            # "P1 Total (70)" is a sum of criteria and must not be pushed as one.
+            return spec(ColumnRole.TOTAL, f"header contains '{matched}'", points=points)
+        return spec(ColumnRole.CRITERION, f"header declares a max of {points:g}", points=points)
+
     # Identity columns first: "SIS Login ID" also contains "id", so order matters.
     if text in NAME_NAMES:
         return spec(ColumnRole.NAME, "header names a student")
@@ -170,17 +180,12 @@ def _classify(header: str, index: int, series: pd.Series, explicit_points_presen
     if base is not None:
         return spec(ColumnRole.COMMENT, "header looks like a comment", target=base)
 
-    # Totals and ratios beat criteria even when they carry a "(n)" suffix, because
-    # "P1 Total (70)" is a sum of criteria and must not be pushed as one.
     matched = _contains(text, TOTAL_TOKENS)
     if matched:
         return spec(ColumnRole.TOTAL, f"header contains '{matched}'", points=points)
     matched = _contains(text, RATIO_TOKENS)
     if matched:
         return spec(ColumnRole.RATIO, f"header contains '{matched}'")
-
-    if points is not None:
-        return spec(ColumnRole.CRITERION, f"header declares a max of {points:g}", points=points)
 
     # Without an explicit max we only guess when the whole sheet lacks them, so that
     # bookkeeping columns in an annotated sheet stay ignored.

@@ -18,3 +18,12 @@ htmlcov/
 canvasgrade.toml
 *.local.*
 scratch/
+
+# Gradebooks dropped in the project root while testing. The only spreadsheets that
+# belong in this repository are the synthetic fixtures under tests/fixtures/, which
+# these root-anchored patterns deliberately do not match.
+/*.csv
+/*.tsv
+/*.xls
+/*.xlsx
+/*.xlsm

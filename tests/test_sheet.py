@@ -103,6 +103,32 @@ class TestDetection:
     def test_every_column_explains_itself(self, mapping) -> None:
         assert all(column.reason for column in mapping.columns)
 
+    def test_a_declared_max_beats_an_identity_keyword(self) -> None:
+        # "Bug reports (team) [5]" is a criterion that happens to say "team". Reading
+        # it as the team column silently dropped 5 points from the rubric.
+        import pandas as pd
+
+        frame = pd.DataFrame(
+            {
+                "Name": ["a"],
+                "Team": ["t1"],
+                "Bug reports (team) [5]": [4],
+                "Group work [10]": [8],
+            }
+        )
+        mapping = detect_mapping(frame)
+        assert mapping.get("Bug reports (team) [5]").role is ColumnRole.CRITERION
+        assert mapping.get("Group work [10]").role is ColumnRole.CRITERION
+        # The genuine team column, which declares no max, is still found.
+        assert mapping.first(ColumnRole.TEAM).name == "Team"
+
+    def test_a_declared_max_does_not_override_a_total(self) -> None:
+        import pandas as pd
+
+        frame = pd.DataFrame({"ID": [1], "Design (10)": [8], "Total (10)": [8]})
+        mapping = detect_mapping(frame)
+        assert mapping.first(ColumnRole.TOTAL).name == "Total (10)"
+
     def test_bracketed_question_numbers_become_criteria(self) -> None:
         import pandas as pd
 
