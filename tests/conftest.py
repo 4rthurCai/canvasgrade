@@ -149,6 +149,28 @@ class FakeCourse:
         return [self._assignment]
 
 
+class FakeSession:
+    """Stands in for :class:`CanvasSession` without touching the network."""
+
+    def __init__(self, profile: Any, course: FakeCourse | None = None) -> None:
+        self.profile = profile
+        self._course = course or FakeCourse()
+
+    def whoami(self) -> str:
+        return "Test Grader"
+
+    def course(self, course_id: int) -> FakeCourse:
+        return self._course
+
+    def assignment(self, course: FakeCourse, assignment_id: int) -> FakeAssignment:
+        return course.get_assignment(assignment_id)
+
+    def speedgrader_url(self, course_id: int, assignment_id: int) -> str:
+        return (
+            f"https://canvas.example.invalid/courses/{course_id}/gradebook/speed_grader?assignment_id={assignment_id}"
+        )
+
+
 @pytest.fixture
 def fake_assignment() -> FakeAssignment:
     return FakeAssignment()
@@ -157,3 +179,10 @@ def fake_assignment() -> FakeAssignment:
 @pytest.fixture
 def fake_course(fake_assignment: FakeAssignment) -> FakeCourse:
     return FakeCourse(fake_assignment)
+
+
+@pytest.fixture
+def fake_session(fake_course: FakeCourse) -> FakeSession:
+    from canvasgrade.config import Profile
+
+    return FakeSession(Profile(api_key="token", course_id=786, assignment_id=7081), fake_course)
