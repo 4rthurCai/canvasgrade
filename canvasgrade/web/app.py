@@ -110,8 +110,7 @@ def create_app(profile: Profile) -> FastAPI:
     def read_rubrics(course_id: int) -> list[api.RubricOut]:
         course = session.course(course_id)
         return [
-            api.RubricOut(id=r.id, title=r.title, criteria=r.criteria, points=r.points)
-            for r in session.rubrics(course)
+            api.RubricOut(id=r.id, title=r.title, criteria=r.criteria, points=r.points) for r in session.rubrics(course)
         ]
 
     @app.post("/api/uploads", response_model=api.UploadOut)

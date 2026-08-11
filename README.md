@@ -30,14 +30,10 @@ pip3 install "canvasgrade[web]"       # CLI + web GUI
 
 Python 3.11 or newer.
 
-> **This is a pre-release.** The tool has not yet been run against a live Canvas
-> instance. Every write is preceded by a preview and a confirmation, and `--dry-run`
-> touches nothing — use it first.
->
-> Note that while `0.1.0rc1` is the *only* published version, plain
-> `pip3 install canvasgrade` installs it: pip falls back to pre-releases when no
-> stable version exists. Once `0.1.0` ships, a plain install will prefer the stable
-> one and `--pre` will be needed to opt back in.
+> **Young project.** Creating a rubric, pushing grades and comments in bulk, and
+> pulling a filled-in template have all been exercised end to end against a live
+> Canvas instance, but this has had few users. Every write is preceded by a preview
+> and a confirmation, and `--dry-run` sends nothing — use it first.
 
 To run the very latest instead of the last release:
 
@@ -53,7 +49,11 @@ Generate an access token on Canvas under **Account → Settings → New Access T
 canvasgrade config init     # writes ~/.canvasgrade.toml, chmod 600
 canvasgrade config show     # check what resolved, token redacted
 canvasgrade courses         # confirm it works, and list course ids
+canvasgrade assignments     # assignment ids, and which have a rubric
+canvasgrade rubrics         # rubric ids, for --rubric-id
 ```
+
+No id ever has to be dug out of the browser's dev tools.
 
 `~/.canvasgrade.toml`:
 
