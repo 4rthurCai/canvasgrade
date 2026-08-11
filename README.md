@@ -56,32 +56,35 @@ touches no network.
 `--dry-run` builds the whole plan — including the rubric that *would* be created — and
 sends nothing:
 
+```bash
+canvasgrade push grades.xlsx --create-rubric --dry-run
 ```
-Project 1 (id 418271) out of 70
-  Would create rubric 'Project 1 rubric' with 4 criteria.
 
-Rubric: Project 1 rubric
-┏━━━┳━━━━━━━━━━━━━━┳━━━━━┳━━━━━━━━━━━━┓
-┃ # ┃ Criterion    ┃ Max ┃ Canvas id  ┃
-┡━━━╇━━━━━━━━━━━━━━╇━━━━━╇━━━━━━━━━━━━┩
-│ 1 │ Design       │  10 │ _preview_1 │
-│ 2 │ Tests        │  20 │ _preview_2 │
-│ 3 │ Code Quality │  35 │ _preview_3 │
-│ 4 │ Docs         │   5 │ _preview_4 │
-│   │ total        │  70 │            │
-└───┴──────────────┴─────┴────────────┘
+> Project 1 (id 418271) out of 70
+> Would create rubric 'Project 1 rubric' with 4 criteria.
 
-Grades to push
-┏━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━┳━━━━━━━┳━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━┓
-┃ Student         ┃ Canvas id ┃ Total ┃ Criteria          ┃ Comments ┃
-┡━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━╇━━━━━━━╇━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━┩
-│ Student 01      │      1001 │    66 │ 7.8 19.8 34.4 4   │          │
-│ Student 02      │      1002 │  52.6 │ 8.3 9.9 32.2 2.2  │          │
-│ ... and 42 more │           │       │                   │          │
-└─────────────────┴───────────┴───────┴───────────────────┴──────────┘
+**The rubric it would build**
 
-44 students ready  |  totals 43.6-66, mean 54.7
-```
+| # | Criterion | Max | Canvas id |
+|---:|---|---:|---|
+| 1 | Design | 10 | `_preview_1` |
+| 2 | Tests | 20 | `_preview_2` |
+| 3 | Code Quality | 35 | `_preview_3` |
+| 4 | Docs | 5 | `_preview_4` |
+| | **total** | **70** | |
+
+**The grades it would push**
+
+| Student | Canvas id | Total | Criteria | Comments |
+|---|---:|---:|---|---:|
+| Student 01 | 1001 | **66** | 7.8 · 19.8 · 34.4 · 4 | |
+| Student 02 | 1002 | **52.6** | 8.3 · 9.9 · 32.2 · 2.2 | |
+| *… and 42 more* | | | | |
+
+> **44 students ready**  |  totals 43.6-66, mean 54.7
+
+Criterion ids read `_preview_N` because nothing has been created yet. Confirm, and they
+become the real ids Canvas hands back.
 
 ## What it does
 
