@@ -1,0 +1,64 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "canvasgrade"
+version = "0.1.0"
+description = "Build Canvas rubrics from a spreadsheet and push grades back, in one step."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { file = "LICENSE" }
+authors = [{ name = "canvasgrade contributors" }]
+keywords = ["canvas", "canvas-lms", "grading", "rubric", "teaching"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Education",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Education",
+]
+dependencies = [
+    "canvasapi>=3.6",
+    "click>=8.1",
+    "openpyxl>=3.1",
+    "pandas>=2.0",
+    "rich>=13.0",
+]
+
+[project.optional-dependencies]
+web = ["fastapi>=0.110", "python-multipart>=0.0.9", "uvicorn[standard]>=0.29"]
+plot = ["matplotlib>=3.8", "scipy>=1.11"]
+all = ["canvasgrade[web,plot]"]
+dev = ["canvasgrade[web,plot]", "pytest>=8.0", "pytest-cov>=5.0", "ruff>=0.5"]
+
+[project.scripts]
+canvasgrade = "canvasgrade.cli:run"
+
+[project.urls]
+Source = "https://github.com/canvasgrade/canvasgrade"
+
+[tool.hatch.build.targets.wheel]
+packages = ["canvasgrade"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]
+# RUF001: full-width CJK punctuation in the header parser is deliberate - Chinese
+#   gradebooks really do use （10分）.
+# RUF003: the same characters appear in the comments that document that parser.
+# UP042: ColumnRole and friends subclass str on purpose so they serialise to JSON.
+ignore = ["RUF001", "RUF003", "UP042"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+markers = [
+    "unit: fast isolated tests",
+    "integration: tests that exercise the Canvas layer against a fake client",
+]
