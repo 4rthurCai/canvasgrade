@@ -75,6 +75,8 @@ class ColumnOverrideIn(BaseModel):
 
 class OptionsIn(BaseModel):
     total: str = "auto"
+    #: Promote every warning to an error and refuse the push.
+    strict: bool = False
     apply_ratio: bool = False
     add_comment: bool = False
     missing_as_zero: bool = True
@@ -97,6 +99,8 @@ class PlanIn(BaseModel):
     overrides: list[ColumnOverrideIn] = Field(default_factory=list)
     include: list[str] = Field(default_factory=list)
     exclude: list[str] = Field(default_factory=list)
+    id_column: str | None = None
+    total_column: str | None = None
     rubric: RubricIn = Field(default_factory=RubricIn)
     options: OptionsIn = Field(default_factory=OptionsIn)
 

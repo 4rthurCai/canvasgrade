@@ -137,3 +137,17 @@ class TestRubricEditing:
     def test_upload_reports_the_name_each_criterion_will_carry(self, uploaded) -> None:
         criteria = {c["name"]: c["description"] for c in uploaded["columns"] if c["role"] == "criterion"}
         assert criteria["M1 Design (10)"] == "M1 Design"
+
+
+class TestParity:
+    """Anything the CLI can do to a push, the GUI should be able to do too."""
+
+    def test_the_api_accepts_the_column_overrides_the_cli_has(self, client) -> None:
+        fields = client.get("/openapi.json").json()["components"]["schemas"]["PlanIn"]["properties"]
+        assert "id_column" in fields
+        assert "total_column" in fields
+
+    def test_strict_is_offered(self, client) -> None:
+        options = client.get("/openapi.json").json()["components"]["schemas"]["OptionsIn"]["properties"]
+        assert "strict" in options
+        assert 'id="strict"' in client.get("/static/index.html").text

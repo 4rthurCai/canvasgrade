@@ -352,6 +352,7 @@ function payload() {
     },
     options: {
       total: $("total").value,
+      strict: $("strict").checked,
       apply_ratio: $("apply-ratio").checked,
       add_comment: $("add-comment").checked,
       missing_as_zero: $("missing-zero").checked,
@@ -574,6 +575,9 @@ function wire() {
   $("sheet").addEventListener("change", () => input.files[0] && uploadFile(input.files[0]));
   $("include").addEventListener("input", () => {
     renderDetected();
+    $("plan-section").hidden = true;
+  });
+  $("strict").addEventListener("change", () => {
     $("plan-section").hidden = true;
   });
   $("preview-btn").addEventListener("click", preview);

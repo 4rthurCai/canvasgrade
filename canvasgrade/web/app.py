@@ -44,6 +44,8 @@ def _sheet_request(payload: api.PlanIn, path: Path) -> SheetRequest:
         has_header=payload.has_header,
         include=tuple(payload.include),
         exclude=tuple(payload.exclude),
+        id_column=payload.id_column,
+        total_column=payload.total_column,
         overrides=tuple(
             ColumnOverride(name=o.name, role=o.role, points=o.points, target=o.target, description=o.description)
             for o in payload.overrides
@@ -149,8 +151,9 @@ def create_app(profile: Profile) -> FastAPI:
             options=_grade_options(payload.options),
             dry_run=True,
         )
+        plan = prepared.plan.with_warnings_as_errors() if payload.options.strict else prepared.plan
         return api.plan_out(
-            prepared.plan,
+            plan,
             assignment=api.AssignmentOut(**prepared.assignment.__dict__),
             notes=list(prepared.notes),
             mapping=prepared.sheet.mapping,
@@ -174,6 +177,9 @@ def create_app(profile: Profile) -> FastAPI:
         # Validate against a stand-in rubric first, so a refused push never leaves a
         # freshly created rubric behind on Canvas.
         prepared = prepare(dry_run=True)
+        if payload.options.strict and prepared.plan.warnings:
+            listed = "; ".join(i.message for i in prepared.plan.warnings[:3])
+            raise HTTPException(status_code=400, detail=f"Refusing to push (strict): {listed}")
         if not prepared.plan.is_pushable:
             messages = "; ".join(issue.message for issue in prepared.plan.errors[:3])
             raise HTTPException(status_code=400, detail=f"Refusing to push: {messages}")

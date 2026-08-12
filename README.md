@@ -96,6 +96,7 @@ become the real ids Canvas hands back.
 | **Per-criterion comments** | A `Design comment` column becomes feedback attached to that criterion. |
 | **Closes the loop** | `pull` writes a template with every student and criterion already filled in; fill in the numbers and push the same file back. |
 | **Refuses to guess** | Students match by Canvas id, then SIS/login id, then name — and it stops rather than pick between two plausible people. |
+| **Lets you correct it** | Every detected role, criterion name and maximum can be overridden, on the command line or in the GUI, before anything is created. |
 
 ## Install
 
@@ -184,6 +185,18 @@ is the whole-project total. Pushing one milestone usually means `--total sum` as
 or `--total-column 'P1M1 Total'`. `--dry-run` shows both, so the mismatch is visible
 before you push.
 
+## When students do not match
+
+A gradebook usually carries both a Canvas user id and an institution student number, and
+neither can be told from the other by looking — both are integers, and how many digits a
+Canvas id has depends only on how old the instance is. So the roster is asked instead:
+
+> `'ID'` matched 0 students, but 82 of the values in `'CanvasID'` are enrolled in this
+> course. If that is the Canvas user id, use `'CanvasID'` as the id column instead.
+
+`--id-column 'CanvasID'` acts on that, and the GUI has the same control in its Role
+dropdown.
+
 ## Which rubric
 
 | Flag | Behaviour |
@@ -253,6 +266,10 @@ maximum, which is the view that tells you a rubric needs adjusting.
 - Scores above a criterion's maximum are capped with a warning (`--no-clamp` makes it an
   error). Negative totals, and two rows resolving to the same student, are always
   errors.
+
+## Changelog
+
+See [CHANGELOG.md](https://github.com/4rthurCai/canvasgrade/blob/master/CHANGELOG.md).
 
 ## Development
 

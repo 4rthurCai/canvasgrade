@@ -118,6 +118,24 @@ class TestLoadSheet:
         ada = next(e for e in plan.entries if e.label == "Ada Lovelace")
         assert dict(ada.criterion_points)["_1"] == 8.0
 
+    def test_a_hand_set_role_displaces_the_detected_one(self, gradebook_path) -> None:
+        # Setting a second column to canvas_id used to leave two, and lookups then
+        # picked by column order - silently ignoring the choice just made.
+        prepared = load_sheet(
+            sheet_request(
+                gradebook_path,
+                overrides=(ColumnOverride(name="SIS Login ID", role=ColumnRole.CANVAS_ID),),
+            )
+        )
+        holders = [c.name for c in prepared.mapping.by_role(ColumnRole.CANVAS_ID)]
+        assert holders == ["SIS Login ID"]
+        assert prepared.mapping.get("ID").role is ColumnRole.IGNORE
+
+    def test_detection_alone_still_settles_duplicates(self, gradebook_path) -> None:
+        prepared = load_sheet(sheet_request(gradebook_path))
+        for role in (ColumnRole.CANVAS_ID, ColumnRole.TOTAL, ColumnRole.RATIO):
+            assert len(prepared.mapping.by_role(role)) <= 1
+
     def test_a_sheet_with_no_students_is_rejected(self, tmp_path) -> None:
         path = tmp_path / "headers-only.csv"
         path.write_text("Student,ID,Design (10)\n,,\n")
@@ -227,7 +245,8 @@ class TestIdentityDiagnosis:
         assert len(plan.entries) == 0
         message = diagnose_identity(prepared, roster, plan)
         assert "CanvasID" in message
-        assert "--id-column" in message
+        # The GUI shows this too, so it must not name a command-line flag alone.
+        assert "--id-column" in message and "GUI" in message
 
     def test_it_stays_quiet_when_everything_matched(self, tmp_path, fake_course) -> None:
         from canvasgrade.canvas.pull import fetch_roster

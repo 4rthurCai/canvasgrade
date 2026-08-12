@@ -114,6 +114,7 @@ def load_sheet(request: SheetRequest) -> PreparedSheet:
             target=override.target,
             description=override.description,
         )
+    mapping = _resolve_single_roles(mapping)
     if request.id_column:
         mapping = _force_role(mapping, request.id_column, ColumnRole.CANVAS_ID, "--id-column")
     if request.total_column:
@@ -125,6 +126,42 @@ def load_sheet(request: SheetRequest) -> PreparedSheet:
             f"No student rows found in {request.path.name}. Run 'canvasgrade inspect' to see how the columns were read."
         )
     return PreparedSheet(data=data, mapping=mapping, rows=rows)
+
+
+#: Roles only one column can hold at a time.
+SINGLE_ROLES = (
+    ColumnRole.CANVAS_ID,
+    ColumnRole.SIS_ID,
+    ColumnRole.NAME,
+    ColumnRole.TEAM,
+    ColumnRole.TOTAL,
+    ColumnRole.RATIO,
+)
+
+
+def _resolve_single_roles(mapping: SheetMapping) -> SheetMapping:
+    """Let a hand-assigned role displace the one the detector chose.
+
+    Detection already keeps a single column per role, but an override is applied on top
+    and can reintroduce a duplicate. Lookups then pick by column order, which silently
+    ignores the choice the user just made.
+    """
+    for role in SINGLE_ROLES:
+        holders = mapping.by_role(role)
+        if len(holders) < 2:
+            continue
+        explicit = [c for c in holders if not c.inferred]
+        if not explicit:
+            continue
+        winner = explicit[-1]
+        for column in holders:
+            if column.name != winner.name:
+                mapping = mapping.override(
+                    column.name,
+                    ColumnRole.IGNORE,
+                    reason=f"'{winner.name}' was set as the {role.value.replace('_', ' ')}",
+                )
+    return mapping
 
 
 def _force_total_column(mapping: SheetMapping, name: str) -> SheetMapping:
@@ -220,10 +257,11 @@ def diagnose_identity(prepared: PreparedSheet, roster: Roster, plan: GradePlan) 
 
     if best_name is None:
         return None
-    using = f"'{current.name}' matched {current_hits}" if current else "no id column was found"
+    using = f"'{current.name}' matched {current_hits} students" if current else "no id column was found"
     return (
         f"{using}, but {best_hits} of the values in '{best_name}' are enrolled in this "
-        f"course. If that is the Canvas user id, pass --id-column '{best_name}'."
+        f"course. If that is the Canvas user id, use '{best_name}' as the id column "
+        f"instead (--id-column on the command line, or the Role dropdown in the GUI)."
     )
 
 
