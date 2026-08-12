@@ -71,6 +71,7 @@ def main() -> None:
 @click.option("-I", "--include", multiple=True, help="Only keep criteria matching this glob, e.g. 'P1M1 *'.")
 @click.option("-E", "--exclude", multiple=True, help="Drop criteria matching this glob.")
 @click.option("--total-column", help="Name of the column holding the total.")
+@click.option("--id-column", help="Name of the column holding the Canvas user id.")
 def inspect(
     input_file: Path,
     sheet: str,
@@ -78,6 +79,7 @@ def inspect(
     include: tuple[str, ...],
     exclude: tuple[str, ...],
     total_column: str | None,
+    id_column: str | None,
 ) -> None:
     """Show how a spreadsheet will be read. Touches no network."""
     out = render.console()
@@ -93,6 +95,7 @@ def inspect(
             include=include,
             exclude=exclude,
             total_column=total_column,
+            id_column=id_column,
         )
     )
     out.print(render.mapping_table(prepared.mapping))
@@ -130,6 +133,10 @@ def inspect(
     help="Where the assignment total comes from.",
 )
 @click.option(
+    "--id-column",
+    help="Name of the column holding the Canvas user id, when the detector picks wrong.",
+)
+@click.option(
     "--total-column",
     help="Name of the column holding the total, when the detector picks the wrong one.",
 )
@@ -165,6 +172,7 @@ def push(input_file: Path, profile_name: str | None, api_url: str | None, api_ke
                 include=opts["include"],
                 exclude=opts["exclude"],
                 total_column=opts["total_column"],
+                id_column=opts["id_column"],
             ),
             rubric_request=RubricRequest(
                 mode=_rubric_mode(opts),

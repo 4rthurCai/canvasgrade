@@ -18,7 +18,7 @@ from canvasgrade.grading.plan import GradeOptions, build_plan
 from canvasgrade.grading.roster import Roster
 from canvasgrade.grading.rubric import bind_to_existing, build_rubric
 from canvasgrade.grading.validate import validate_plan
-from canvasgrade.models import ColumnRole, GradePlan, RubricSpec, SheetMapping, StudentRow
+from canvasgrade.models import ColumnRole, GradePlan, Issue, RubricSpec, SheetMapping, StudentRow
 from canvasgrade.sheet.detect import detect_mapping
 from canvasgrade.sheet.reader import SheetData, read_sheet
 from canvasgrade.sheet.rows import extract_rows
@@ -56,6 +56,9 @@ class SheetRequest:
     #: wrong - a sheet covering three milestones has a subtotal per milestone and the
     #: detector keeps the last one, which is the whole-project figure.
     total_column: str | None = None
+    #: Name of the column holding the Canvas user id, when the detector picks the wrong
+    #: one. A sheet often carries both a Canvas id and an institution student number.
+    id_column: str | None = None
 
 
 @dataclass(frozen=True)
@@ -111,6 +114,8 @@ def load_sheet(request: SheetRequest) -> PreparedSheet:
             target=override.target,
             description=override.description,
         )
+    if request.id_column:
+        mapping = _force_role(mapping, request.id_column, ColumnRole.CANVAS_ID, "--id-column")
     if request.total_column:
         mapping = _force_total_column(mapping, request.total_column)
     mapping = filter_criteria(mapping, include=request.include, exclude=request.exclude)
@@ -160,6 +165,65 @@ def _force_total_column(mapping: SheetMapping, name: str) -> SheetMapping:
         ColumnRole.TOTAL,
         points=chosen.points if chosen.points is not None else parse_points(chosen.name),
         reason="named by --total-column",
+    )
+
+
+def _force_role(mapping: SheetMapping, name: str, role: ColumnRole, flag: str) -> SheetMapping:
+    """Give ``name`` a role by hand, demoting whichever column the detector chose."""
+    from canvasgrade.sheet.detect import normalise, strip_points
+
+    wanted = normalise(name)
+    chosen = next(
+        (
+            column
+            for column in mapping.columns
+            if wanted in (normalise(column.name), normalise(strip_points(column.name)))
+        ),
+        None,
+    )
+    if chosen is None:
+        available = ", ".join(repr(c.name) for c in mapping.columns[:8])
+        raise MappingError(f"No column named {name!r}. The sheet has: {available} ...")
+
+    for column in mapping.by_role(role):
+        if column.name != chosen.name:
+            mapping = mapping.override(column.name, ColumnRole.IGNORE, reason=f"{flag} chose '{chosen.name}' instead")
+    return mapping.override(chosen.name, role, reason=f"named by {flag}")
+
+
+def diagnose_identity(prepared: PreparedSheet, roster: Roster, plan: GradePlan) -> str | None:
+    """When rows fail to match, name the column whose values are actually enrolled.
+
+    Canvas user ids cannot be told from an institution's student number by looking at
+    them - both are just integers, and how many digits a Canvas id has depends on how
+    old the instance is. What can be checked is whether the numbers are enrolled.
+    """
+    import pandas as pd
+
+    if roster.is_empty or not plan.skipped:
+        return None
+
+    enrolled = {entry.user_id for entry in roster.entries}
+    current = prepared.mapping.first(ColumnRole.CANVAS_ID)
+    current_hits = len(plan.entries)
+
+    best_name, best_hits = None, current_hits
+    for column in prepared.mapping.columns:
+        if current is not None and column.name == current.name:
+            continue
+        values = pd.to_numeric(prepared.data.frame.iloc[:, column.index], errors="coerce").dropna()
+        if values.empty:
+            continue
+        hits = sum(1 for value in values if float(value).is_integer() and int(value) in enrolled)
+        if hits > best_hits:
+            best_name, best_hits = column.name, hits
+
+    if best_name is None:
+        return None
+    using = f"'{current.name}' matched {current_hits}" if current else "no id column was found"
+    return (
+        f"{using}, but {best_hits} of the values in '{best_name}' are enrolled in this "
+        f"course. If that is the Canvas user id, pass --id-column '{best_name}'."
     )
 
 
@@ -251,6 +315,15 @@ def prepare_push(
     roster = fetch_roster(course) if use_roster else Roster()
     plan = build_plan(prepared.rows, rubric=rubric, roster=roster, options=options)
     plan = validate_plan(plan, points_possible=info.points_possible, roster_size=len(roster.entries) or None)
+
+    suggestion = diagnose_identity(prepared, roster, plan)
+    if suggestion:
+        plan = GradePlan(
+            rubric=plan.rubric,
+            entries=plan.entries,
+            issues=(*plan.issues, Issue("warning", suggestion)),
+            skipped=plan.skipped,
+        )
 
     return PreparedPush(
         sheet=prepared,

@@ -195,3 +195,67 @@ class TestPreparePush:
             options=GradeOptions(total="sum", add_comment=True),
         )
         assert all(entry.text_comment for entry in prepared.plan.entries)
+
+
+class TestIdentityDiagnosis:
+    """Canvas ids and student numbers are both just integers; only the roster knows."""
+
+    def _sheet(self, tmp_path, canvas_ids, other_ids):
+        path = tmp_path / "grades.csv"
+        rows = "\n".join(
+            f"Student {i},{c},{o},8,17" for i, (c, o) in enumerate(zip(canvas_ids, other_ids, strict=True), 1)
+        )
+        path.write_text(f"Name,CanvasID,ID,Design (10),Tests (20)\n{rows}\n")
+        return path
+
+    def test_it_names_the_column_whose_values_are_enrolled(self, tmp_path, fake_course) -> None:
+        from canvasgrade.canvas.pull import fetch_roster
+        from canvasgrade.grading.plan import build_plan
+        from canvasgrade.grading.rubric import build_rubric
+        from canvasgrade.workflow import diagnose_identity
+
+        roster = fetch_roster(fake_course)
+        enrolled = [e.user_id for e in roster.entries][:3]
+        path = self._sheet(tmp_path, enrolled, [525370990084, 525370990085, 525370990086])
+
+        # Point it at the student number on purpose.
+        prepared = load_sheet(sheet_request(path, id_column="ID"))
+        spec = build_rubric(prepared.mapping, "t")
+        bound = spec.with_ids({c.description: f"_{i}" for i, c in enumerate(spec.criteria, 1)}, rubric_id=1)
+        plan = build_plan(prepared.rows, rubric=bound, roster=roster)
+
+        assert len(plan.entries) == 0
+        message = diagnose_identity(prepared, roster, plan)
+        assert "CanvasID" in message
+        assert "--id-column" in message
+
+    def test_it_stays_quiet_when_everything_matched(self, tmp_path, fake_course) -> None:
+        from canvasgrade.canvas.pull import fetch_roster
+        from canvasgrade.grading.plan import build_plan
+        from canvasgrade.grading.rubric import build_rubric
+        from canvasgrade.workflow import diagnose_identity
+
+        roster = fetch_roster(fake_course)
+        enrolled = [e.user_id for e in roster.entries][:3]
+        path = self._sheet(tmp_path, enrolled, [1, 2, 3])
+
+        prepared = load_sheet(sheet_request(path))
+        spec = build_rubric(prepared.mapping, "t")
+        bound = spec.with_ids({c.description: f"_{i}" for i, c in enumerate(spec.criteria, 1)}, rubric_id=1)
+        plan = build_plan(prepared.rows, rubric=bound, roster=roster)
+
+        assert len(plan.entries) == 3
+        assert diagnose_identity(prepared, roster, plan) is None
+
+    def test_id_column_can_be_forced_either_way(self, tmp_path, fake_course) -> None:
+        from canvasgrade.models import ColumnRole
+
+        path = self._sheet(tmp_path, [1, 2, 3], [4, 5, 6])
+        for wanted in ("CanvasID", "ID"):
+            prepared = load_sheet(sheet_request(path, id_column=wanted))
+            assert prepared.mapping.first(ColumnRole.CANVAS_ID).name == wanted
+
+    def test_an_unknown_id_column_is_reported(self, tmp_path, fake_course) -> None:
+        path = self._sheet(tmp_path, [1], [2])
+        with pytest.raises(MappingError, match="No column named"):
+            load_sheet(sheet_request(path, id_column="Nope"))
