@@ -151,3 +151,20 @@ class TestParity:
         options = client.get("/openapi.json").json()["components"]["schemas"]["OptionsIn"]["properties"]
         assert "strict" in options
         assert 'id="strict"' in client.get("/static/index.html").text
+
+
+class TestCriterionDetail:
+    """Canvas shows a detail line when a student opens a criterion."""
+
+    def test_the_override_carries_it(self, client) -> None:
+        fields = client.get("/openapi.json").json()["components"]["schemas"]["ColumnOverrideIn"]["properties"]
+        assert "long_description" in fields
+
+    def test_the_page_offers_an_input_for_it(self, client) -> None:
+        js = client.get("/static/app.js").text
+        assert 'detail.className = "detail"' in js
+        assert "column.long_description" in js
+
+    def test_the_push_reports_progress(self, client) -> None:
+        # The bulk job is asynchronous; a spinner alone looks like a hang.
+        assert "uploading ${count} grades" in client.get("/static/app.js").text

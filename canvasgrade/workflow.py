@@ -47,6 +47,7 @@ class ColumnOverride:
     points: float | None = None
     target: str | None = None
     description: str | None = None
+    long_description: str | None = None
 
 
 @dataclass(frozen=True)
@@ -121,6 +122,7 @@ def load_sheet(request: SheetRequest) -> PreparedSheet:
             points=override.points,
             target=override.target,
             description=override.description,
+            long_description=override.long_description,
         )
     mapping = _resolve_single_roles(mapping)
     if request.id_column:

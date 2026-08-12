@@ -245,6 +245,17 @@ function renderColumns(columns) {
         setOverride(column, select.value, criteriaNames, undefined, rename.value)
       );
       nameCell.append(rename);
+
+      // What Canvas shows when a student opens the criterion.
+      const detail = document.createElement("input");
+      detail.type = "text";
+      detail.className = "detail";
+      detail.placeholder = "detail shown to students (optional)";
+      detail.value = column.long_description || "";
+      detail.addEventListener("change", () =>
+        setOverride(column, select.value, criteriaNames, undefined, undefined, detail.value)
+      );
+      nameCell.append(detail);
     } else {
       nameCell.innerHTML = '<span class="muted">—</span>';
     }
@@ -273,7 +284,7 @@ function renderColumns(columns) {
   }
 }
 
-function setOverride(column, role, criteriaNames, points, description) {
+function setOverride(column, role, criteriaNames, points, description, longDescription) {
   // Overrides replace the detector's answer wholesale, so carry forward whatever the
   // user is not editing right now - otherwise renaming a criterion clears its max.
   const previous = state.overrides.get(column.name) || {};
@@ -285,6 +296,9 @@ function setOverride(column, role, criteriaNames, points, description) {
 
   if (description !== undefined) override.description = description.trim() || null;
   else if (previous.description) override.description = previous.description;
+
+  if (longDescription !== undefined) override.long_description = longDescription.trim() || null;
+  else if (previous.long_description) override.long_description = previous.long_description;
 
   if (role === "comment") override.target = column.target || criteriaNames[0] || null;
 
@@ -513,7 +527,12 @@ async function push() {
   if (!confirm(`Push ${count} grades to Canvas? This writes to student records.`)) return;
 
   $("push-btn").disabled = true;
-  busy($("push-status"), "uploading…");
+  const started = Date.now();
+  const tick = setInterval(() => {
+    const seconds = Math.round((Date.now() - started) / 1000);
+    busy($("push-status"), `uploading ${count} grades… ${seconds}s`);
+  }, 1000);
+  busy($("push-status"), `uploading ${count} grades…`);
   try {
     const result = await api("/api/push", {
       method: "POST",
@@ -526,6 +545,7 @@ async function push() {
     fatal(error.message);
     $("push-btn").disabled = false;
   } finally {
+    clearInterval(tick);
     busy($("push-status"), "");
   }
 }

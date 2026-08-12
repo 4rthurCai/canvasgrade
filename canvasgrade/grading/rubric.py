@@ -43,7 +43,12 @@ def build_rubric(mapping: SheetMapping, title: str) -> RubricSpec:
         )
 
     criteria = tuple(
-        Criterion(column=column.name, description=description, points=float(column.points))  # type: ignore[arg-type]
+        Criterion(
+            column=column.name,
+            description=description,
+            points=float(column.points),  # type: ignore[arg-type]
+            long_description=column.long_description or "",
+        )
         for column, description in zip(columns, descriptions, strict=True)
     )
     return RubricSpec(title=title, criteria=criteria)

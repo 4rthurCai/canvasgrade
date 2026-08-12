@@ -47,7 +47,14 @@ def _sheet_request(payload: api.PlanIn, path: Path) -> SheetRequest:
         id_column=payload.id_column,
         total_column=payload.total_column,
         overrides=tuple(
-            ColumnOverride(name=o.name, role=o.role, points=o.points, target=o.target, description=o.description)
+            ColumnOverride(
+                name=o.name,
+                role=o.role,
+                points=o.points,
+                target=o.target,
+                description=o.description,
+                long_description=o.long_description,
+            )
             for o in payload.overrides
         ),
     )

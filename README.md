@@ -170,7 +170,9 @@ Rules worth knowing:
 - **A row with a name but no id and no scores is a team header.** The rows below it
   inherit that team name.
 
-Run `canvasgrade inspect <file>` on your own sheet to see which rule each column hit.
+`canvasgrade inspect <file>` shows which rule each column hit **and the rubric it would
+build** — criterion names, maxima and the total — without a token, an assignment id or
+any network access.
 
 ## One sheet, several assignments
 
@@ -215,6 +217,7 @@ dropdown.
 | `--total sheet` | always use the total column, and fail if it is empty |
 | `--total-column 'P1M1 Total'` | pick which column *is* the total |
 | `--rename 'Q1 (10)=Design'` | rename a criterion for the rubric students see |
+| `--describe 'Q1 (10)=…'` | the detail Canvas shows when a student opens that criterion |
 | `--apply-ratio` | multiply the total by the ratio column |
 
 `--apply-ratio` is off by default because a total column has usually had the ratio

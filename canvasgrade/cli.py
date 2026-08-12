@@ -21,6 +21,7 @@ from canvasgrade.config import CONFIG_PATH, check_permissions, load_profile
 from canvasgrade.config import write_template as write_config
 from canvasgrade.errors import CanvasGradeError
 from canvasgrade.grading.plan import DEFAULT_COMMENT, GradeOptions
+from canvasgrade.grading.rubric import build_rubric
 from canvasgrade.sheet.reader import list_sheets
 from canvasgrade.workflow import ColumnOverride, RubricRequest, SheetRequest, load_sheet, prepare_push
 
@@ -72,6 +73,14 @@ def main() -> None:
 @click.option("-E", "--exclude", multiple=True, help="Drop criteria matching this glob.")
 @click.option("--total-column", help="Name of the column holding the total.")
 @click.option("--id-column", help="Name of the column holding the Canvas user id.")
+@click.option(
+    "--rename",
+    "renames",
+    multiple=True,
+    metavar="COLUMN=NAME",
+    help="Rename a criterion, to see how the rubric would read.",
+)
+@click.option("--columns-only", is_flag=True, help="Skip the rubric preview.")
 def inspect(
     input_file: Path,
     sheet: str,
@@ -80,6 +89,8 @@ def inspect(
     exclude: tuple[str, ...],
     total_column: str | None,
     id_column: str | None,
+    renames: tuple[str, ...],
+    columns_only: bool,
 ) -> None:
     """Show how a spreadsheet will be read. Touches no network."""
     out = render.console()
@@ -96,18 +107,40 @@ def inspect(
             exclude=exclude,
             total_column=total_column,
             id_column=id_column,
+            overrides=_rename_overrides(
+                input_file,
+                {
+                    "renames": renames,
+                    "describes": (),
+                    "sheet": sheet,
+                    "no_header": no_header,
+                    "id_column": id_column,
+                    "total_column": total_column,
+                },
+            ),
         )
     )
     out.print(render.mapping_table(prepared.mapping))
     out.print()
-    out.print(f"[bold]{render.rows_summary(prepared.rows)}[/] from {prepared.data.n_rows} rows in the file")
 
     criteria = prepared.mapping.criteria_columns
+    if not criteria:
+        out.print("[yellow]No criteria found. Headers need a max score, e.g. 'Code Quality (35)'.[/]")
+    elif not columns_only:
+        # The rubric is what actually gets created, so show it as a rubric - offline,
+        # without needing a token or an assignment id.
+        try:
+            spec = build_rubric(prepared.mapping, f"{input_file.stem} rubric")
+        except CanvasGradeError as exc:
+            out.print(f"[yellow]Cannot build a rubric from this sheet: {exc}[/]")
+        else:
+            out.print(render.rubric_table(spec))
+            out.print()
+
+    out.print(f"[bold]{render.rows_summary(prepared.rows)}[/] from {prepared.data.n_rows} rows in the file")
     if criteria:
         total = sum(c.points or 0 for c in criteria)
         out.print(f"[bold]{len(criteria)} criteria[/] worth [bold]{total:g}[/] points in total")
-    else:
-        out.print("[yellow]No criteria found. Headers need a max score, e.g. 'Code Quality (35)'.[/]")
 
 
 # --------------------------------------------------------------------------- push
@@ -146,6 +179,13 @@ def inspect(
     multiple=True,
     metavar="COLUMN=NAME",
     help="Rename a criterion for the rubric students see, e.g. --rename 'Q1 (10)=Design'.",
+)
+@click.option(
+    "--describe",
+    "describes",
+    multiple=True,
+    metavar="COLUMN=TEXT",
+    help="Detail text Canvas shows when a student opens that criterion.",
 )
 @click.option("--apply-ratio", is_flag=True, help="Multiply the total by the sheet's ratio column.")
 @click.option("--strict", is_flag=True, help="Treat warnings as errors and refuse to push.")
@@ -502,8 +542,9 @@ def plot(
 
 def _rename_overrides(input_file: Path, opts: dict[str, Any]) -> tuple[ColumnOverride, ...]:
     """Turn --rename pairs into overrides, checking the columns exist first."""
-    renames = _renames(opts["renames"])
-    if not renames:
+    renames = _renames(opts["renames"], "--rename")
+    describes = _renames(opts.get("describes", ()), "--describe")
+    if not renames and not describes:
         return ()
 
     prepared = load_sheet(
@@ -516,18 +557,20 @@ def _rename_overrides(input_file: Path, opts: dict[str, Any]) -> tuple[ColumnOve
         )
     )
     overrides = []
-    for column_name, new_name in renames.items():
+    for column_name in {**renames, **describes}:
         column = prepared.mapping.get(column_name)
         if column is None:
             known = ", ".join(repr(c.name) for c in prepared.mapping.criteria_columns[:6])
-            raise click.UsageError(f"--rename: no column {column_name!r}. Criteria are: {known}")
+            flag = "--rename" if column_name in renames else "--describe"
+            raise click.UsageError(f"{flag}: no column {column_name!r}. Criteria are: {known}")
         overrides.append(
             ColumnOverride(
                 name=column.name,
                 role=column.role,
                 points=column.points,
                 target=column.target,
-                description=new_name,
+                description=renames.get(column_name, column.description),
+                long_description=describes.get(column_name, column.long_description),
             )
         )
     return tuple(overrides)
@@ -568,15 +611,15 @@ def _rubric_mode(opts: dict[str, Any]) -> str:
     return "attached"
 
 
-def _renames(pairs: tuple[str, ...]) -> dict[str, str]:
-    """Parse --rename 'Column=Name' into a lookup, complaining about bad syntax."""
-    renames: dict[str, str] = {}
+def _renames(pairs: tuple[str, ...], flag: str) -> dict[str, str]:
+    """Parse 'Column=value' pairs into a lookup, complaining about bad syntax."""
+    parsed: dict[str, str] = {}
     for pair in pairs:
-        column, separator, name = pair.partition("=")
-        if not separator or not column.strip() or not name.strip():
-            raise click.UsageError(f"--rename expects 'column=new name', got {pair!r}")
-        renames[column.strip()] = name.strip()
-    return renames
+        column, separator, value = pair.partition("=")
+        if not separator or not column.strip() or not value.strip():
+            raise click.UsageError(f"{flag} expects 'column=value', got {pair!r}")
+        parsed[column.strip()] = value.strip()
+    return parsed
 
 
 def run() -> None:

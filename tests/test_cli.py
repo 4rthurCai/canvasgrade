@@ -151,12 +151,62 @@ class TestPush:
     def test_rename_rejects_bad_syntax(self, runner, gradebook_path, offline) -> None:
         result = runner.invoke(cli.main, self._args(gradebook_path, "-n", "--rename", "nonsense"))
         assert result.exit_code != 0
-        assert "column=new name" in result.output
+        assert "column=value" in result.output
 
     def test_rename_names_the_real_criteria_when_the_column_is_wrong(self, runner, gradebook_path, offline) -> None:
         result = runner.invoke(cli.main, self._args(gradebook_path, "-n", "--rename", "Nope=X"))
         assert result.exit_code != 0
         assert "M1 Design (10)" in result.output
+
+    def test_describe_reaches_the_canvas_payload(self, runner, gradebook_path, offline) -> None:
+        result = runner.invoke(
+            cli.main,
+            self._args(
+                gradebook_path,
+                "--create-rubric",
+                "-y",
+                "--describe",
+                "M1 Design (10)=Module boundaries and naming.",
+            ),
+        )
+        assert result.exit_code == 0, result.output
+        sent = offline.created[0]["rubric"]["criteria"]
+        assert sent[0]["long_description"] == "Module boundaries and naming."
+        assert sent[1]["long_description"] == ""
+
+    def test_rename_and_describe_combine(self, runner, gradebook_path, offline) -> None:
+        result = runner.invoke(
+            cli.main,
+            self._args(
+                gradebook_path,
+                "--create-rubric",
+                "-y",
+                "--rename",
+                "M1 Design (10)=Architecture",
+                "--describe",
+                "M1 Design (10)=What we looked for.",
+            ),
+        )
+        assert result.exit_code == 0, result.output
+        sent = offline.created[0]["rubric"]["criteria"]
+        assert sent[0]["description"] == "Architecture"
+        assert sent[0]["long_description"] == "What we looked for."
+
+    def test_describe_rejects_an_unknown_column(self, runner, gradebook_path, offline) -> None:
+        result = runner.invoke(cli.main, self._args(gradebook_path, "-n", "--describe", "Nope=X"))
+        assert result.exit_code != 0
+        assert "--describe" in result.output
+
+    def test_inspect_previews_the_rubric_without_a_network(self, runner, gradebook_path) -> None:
+        result = runner.invoke(cli.main, ["inspect", str(gradebook_path), "-I", "M1 *"])
+        assert result.exit_code == 0, result.output
+        assert "Rubric:" in result.output
+        assert "M1 Design" in result.output
+        assert "total" in result.output
+
+    def test_inspect_can_skip_the_rubric(self, runner, gradebook_path) -> None:
+        result = runner.invoke(cli.main, ["inspect", str(gradebook_path), "--columns-only"])
+        assert "Rubric:" not in result.output
 
     def test_missing_ids_are_reported_not_traced(self, runner, gradebook_path, offline) -> None:
         result = runner.invoke(cli.main, ["push", str(gradebook_path), "-I", "M1 *", "-n"])

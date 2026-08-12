@@ -49,6 +49,7 @@ class ColumnOut(BaseModel):
     target: str | None = None
     #: The criterion name students will see, whether derived or overridden.
     description: str | None = None
+    long_description: str | None = None
     inferred: bool = True
     reason: str = ""
 
@@ -71,6 +72,7 @@ class ColumnOverrideIn(BaseModel):
     points: float | None = None
     target: str | None = None
     description: str | None = None
+    long_description: str | None = None
 
 
 class OptionsIn(BaseModel):
@@ -166,6 +168,7 @@ def columns_out(mapping: SheetMapping) -> list[ColumnOut]:
             points=column.points,
             target=column.target,
             description=column.description or (strip_points(column.name) or column.name),
+            long_description=column.long_description,
             inferred=column.inferred,
             reason=column.reason,
         )

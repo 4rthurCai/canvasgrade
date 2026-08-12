@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.3.0
+
+### Added
+
+- **`inspect` now previews the rubric**, not just the column mapping. Seeing what would
+  be created previously meant `push --dry-run`, which needs a token and an assignment;
+  the rubric a sheet implies is knowable offline, so now it is shown offline.
+  `--columns-only` skips it.
+- **`--describe 'Column=text'`** sets the detail Canvas shows when a student opens a
+  criterion. The field already travelled all the way to the API payload — there was
+  simply no way to fill it in. The GUI has an input for it under the criterion name.
+- `inspect` accepts `--rename`, so you can see how a renamed rubric reads before pushing.
+- **The GUI reports progress while pushing.** The bulk job is asynchronous and a bare
+  spinner is indistinguishable from a hang, so it now counts the seconds and says how
+  many grades are in flight.
+
 ## 0.2.1
 
 ### Fixed

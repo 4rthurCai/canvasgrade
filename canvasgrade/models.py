@@ -44,6 +44,8 @@ class ColumnSpec:
     #: Overrides the criterion name students see. Defaults to the header with its
     #: max-score marker stripped, which is not always a sentence worth showing.
     description: str | None = None
+    #: The detail text Canvas shows when a student opens the criterion.
+    long_description: str | None = None
     #: True when the role was guessed, False when the user set it explicitly.
     inferred: bool = True
     #: Why the detector chose this role - shown in the CLI table and the GUI.
@@ -56,6 +58,7 @@ class ColumnSpec:
         points: float | None = None,
         target: str | None = None,
         description: str | None = None,
+        long_description: str | None = None,
         reason: str = "set by user",
     ) -> ColumnSpec:
         """Return a copy carrying a user-supplied role."""
@@ -65,6 +68,7 @@ class ColumnSpec:
             points=points,
             target=target,
             description=description,
+            long_description=long_description,
             inferred=False,
             reason=reason,
         )
@@ -105,13 +109,21 @@ class SheetMapping:
         points: float | None = None,
         target: str | None = None,
         description: str | None = None,
+        long_description: str | None = None,
         reason: str = "set by user",
     ) -> SheetMapping:
         """Return a new mapping with one column's role replaced."""
         if self.get(name) is None:
             raise KeyError(f"No column named {name!r} in this sheet")
         columns = tuple(
-            c.with_role(role, points=points, target=target, description=description, reason=reason)
+            c.with_role(
+                role,
+                points=points,
+                target=target,
+                description=description,
+                long_description=long_description,
+                reason=reason,
+            )
             if c.name == name
             else c
             for c in self.columns
