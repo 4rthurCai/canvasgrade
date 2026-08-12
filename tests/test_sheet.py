@@ -103,6 +103,44 @@ class TestDetection:
     def test_every_column_explains_itself(self, mapping) -> None:
         assert all(column.reason for column in mapping.columns)
 
+    def test_canvas_id_is_recognised_without_a_separator(self) -> None:
+        import pandas as pd
+
+        for header in ("CanvasID", "Canvas_ID", "canvas id", "CanvasUserID"):
+            frame = pd.DataFrame({"Name": ["a"], header: [550531], "Design (10)": [8]})
+            mapping = detect_mapping(frame)
+            assert mapping.first(ColumnRole.CANVAS_ID).name == header, header
+
+    def test_an_explicit_canvas_id_beats_a_bare_id(self) -> None:
+        # A sheet with both means the student number by "ID". Grading against that
+        # addresses users who do not exist.
+        import pandas as pd
+
+        frame = pd.DataFrame(
+            {
+                "Name": ["a"],
+                "CanvasID": [550531],
+                "ID": [525370990084],
+                "Design (10)": [8],
+            }
+        )
+        mapping = detect_mapping(frame)
+        assert mapping.first(ColumnRole.CANVAS_ID).name == "CanvasID"
+        assert mapping.get("ID").role is ColumnRole.IGNORE
+        assert "CanvasID" in mapping.get("ID").reason
+
+    def test_a_bare_id_is_still_used_when_it_is_all_there_is(self) -> None:
+        import pandas as pd
+
+        frame = pd.DataFrame({"Name": ["a"], "ID": [550531], "Design (10)": [8]})
+        assert detect_mapping(frame).first(ColumnRole.CANVAS_ID).name == "ID"
+
+    def test_a_student_id_is_not_mistaken_for_the_canvas_id(self) -> None:
+        import pandas as pd
+
+        frame = pd.DataFrame({"Name": ["a"], "Student_ID": [525370990084], "Design (10)": [8]})
+        assert detect_mapping(frame).first(ColumnRole.CANVAS_ID) is None
+
     def test_a_declared_max_beats_an_identity_keyword(self) -> None:
         # "Bug reports (team) [5]" is a criterion that happens to say "team". Reading
         # it as the team column silently dropped 5 points from the rubric.

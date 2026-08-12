@@ -45,9 +45,13 @@ WRAPPED_PATTERNS = tuple(
     for opener, closer in BRACKET_PAIRS
 )
 
-CANVAS_ID_NAMES = frozenset(
-    {"id", "uid", "canvas id", "canvas uid", "user id", "canvas user id", "canvas_id", "user_id"}
-)
+#: Unambiguous names for the Canvas user id, compared with separators removed so
+#: "Canvas_ID", "canvas id" and "CanvasID" are all the same thing.
+CANVAS_ID_STRONG = frozenset({"canvasid", "canvasuid", "canvasuserid"})
+#: Plausible, but weak. A sheet that also carries a "CanvasID" column means something
+#: else by a bare "ID" - usually the institution's student number, which would push
+#: grades at user ids that do not exist.
+CANVAS_ID_WEAK = frozenset({"id", "uid", "userid"})
 NAME_NAMES = frozenset(
     {"student", "students", "name", "names", "student name", "full name", "姓名", "学生", "学生姓名"}
 )
@@ -78,6 +82,11 @@ def normalise(header: str) -> str:
     text = str(header).strip().lower()
     text = text.replace("（", "(").replace("）", ")").replace("：", ":")
     return " ".join(text.split())
+
+
+def squash(header: str) -> str:
+    """Normalise, then drop separators, so "Canvas_ID" and "CanvasID" compare equal."""
+    return re.sub(r"[^0-9a-z\u4e00-\u9fff]+", "", normalise(header))
 
 
 def parse_header(header: str) -> tuple[str, float | None]:
@@ -169,8 +178,11 @@ def _classify(header: str, index: int, series: pd.Series, explicit_points_presen
     matched = _contains(text, SIS_TOKENS)
     if matched:
         return spec(ColumnRole.SIS_ID, f"header contains '{matched}'")
-    if text in CANVAS_ID_NAMES:
-        return spec(ColumnRole.CANVAS_ID, "header is a Canvas user id")
+    squashed = squash(header)
+    if squashed in CANVAS_ID_STRONG:
+        return spec(ColumnRole.CANVAS_ID, "header names the Canvas user id")
+    if squashed in CANVAS_ID_WEAK:
+        return spec(ColumnRole.CANVAS_ID, "header looks like a Canvas user id")
     matched = _contains(text, TEAM_TOKENS)
     if matched:
         return spec(ColumnRole.TEAM, f"header contains '{matched}'")
@@ -197,6 +209,34 @@ def _classify(header: str, index: int, series: pd.Series, explicit_points_presen
     if _is_numericish(series):
         return spec(ColumnRole.IGNORE, "numeric, but header declares no max score")
     return spec(ColumnRole.IGNORE, "not a score column")
+
+
+def _prefer_specific_canvas_id(columns: list[ColumnSpec]) -> list[ColumnSpec]:
+    """When a sheet has both "CanvasID" and a bare "ID", the specific one wins.
+
+    Getting this backwards is expensive: the bare column is usually the institution's
+    student number, and grading against it addresses users who do not exist.
+    """
+    candidates = [c for c in columns if c.role is ColumnRole.CANVAS_ID]
+    if len(candidates) < 2:
+        return columns
+    strong = [c for c in candidates if squash(c.name) in CANVAS_ID_STRONG]
+    if not strong:
+        return columns
+
+    winner = strong[0]
+    losers = {c.name for c in candidates if c is not winner}
+    return [
+        c
+        if c.name not in losers
+        else ColumnSpec(
+            name=c.name,
+            index=c.index,
+            role=ColumnRole.IGNORE,
+            reason=f"'{winner.name}' is the explicit Canvas user id",
+        )
+        for c in columns
+    ]
 
 
 def _dedupe_single(columns: list[ColumnSpec], role: ColumnRole, keep: str) -> list[ColumnSpec]:
@@ -291,6 +331,7 @@ def detect_mapping(frame: pd.DataFrame, *, has_header: bool = True) -> SheetMapp
         _classify(header, index, frame.iloc[:, index], explicit_points_present) for index, header in enumerate(headers)
     ]
 
+    columns = _prefer_specific_canvas_id(columns)
     columns = _dedupe_single(columns, ColumnRole.CANVAS_ID, keep="first")
     columns = _dedupe_single(columns, ColumnRole.SIS_ID, keep="first")
     columns = _dedupe_single(columns, ColumnRole.NAME, keep="first")
