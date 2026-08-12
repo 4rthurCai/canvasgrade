@@ -230,6 +230,9 @@ rubric total; it is off by default, since it would overwrite your sheet's total.
 canvasgrade pull -c 786 -a 7081 -o p2.xlsx --with-grades
 ```
 
+If the roster changes while you are marking, `--merge` picks up the new enrolment without
+discarding what you have already typed, and tells you what it changed.
+
 One row per enrolled student with their Canvas id already filled in, one column per
 rubric criterion, existing scores pre-filled. Type in the numbers and push the same file
 back — no ids to copy by hand.
@@ -270,6 +273,16 @@ maximum, which is the view that tells you a rubric needs adjusting.
 - Scores above a criterion's maximum are capped with a warning (`--no-clamp` makes it an
   error). Negative totals, and two rows resolving to the same student, are always
   errors.
+
+## Every command
+
+[docs/commands.md](https://github.com/4rthurCai/canvasgrade/blob/master/docs/commands.md)
+is the full reference. Or ask the tool:
+
+```bash
+canvasgrade help             # the command list
+canvasgrade help push        # one command in detail
+```
 
 ## Changelog
 

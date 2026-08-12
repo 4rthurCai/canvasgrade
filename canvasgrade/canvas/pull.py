@@ -127,6 +127,74 @@ def build_template(
     return pd.DataFrame.from_records(records, columns=columns)
 
 
+def _plural(count: int, singular: str, plural: str | None = None) -> str:
+    return f"{count} {singular if count == 1 else (plural or singular + 's')}"
+
+
+def merge_templates(fresh: pd.DataFrame, previous: pd.DataFrame) -> tuple[pd.DataFrame, list[str]]:
+    """Carry hand-entered scores from an earlier template into a freshly pulled one.
+
+    The roster in ``fresh`` wins, since picking up enrolment changes is the reason to
+    pull again. Anything already typed in ``previous`` beats a blank, matched on Canvas
+    id so that reordering rows or editing a name cannot lose a score.
+
+    Returns the merged sheet and a plain-language account of what changed, because
+    silently dropping a departed student's marks would be the worst way to find out.
+    """
+    if ID_COLUMN not in previous.columns:
+        raise CanvasError(
+            f"{ID_COLUMN!r} is missing from the existing file, so scores cannot be matched "
+            "to students. Pass --force to overwrite it instead."
+        )
+
+    kept = previous.set_index(pd.to_numeric(previous[ID_COLUMN], errors="coerce"))
+    # A freshly built template has empty score columns, which pandas types as str; the
+    # scores being carried over are numbers, so widen to object before writing any.
+    merged = fresh.astype(object)
+    notes: list[str] = []
+
+    filled = 0
+    for column in merged.columns:
+        if column in (NAME_COLUMN, ID_COLUMN, SIS_COLUMN) or column not in kept.columns:
+            continue
+        position_of_column = merged.columns.get_loc(column)
+        for row, user_id in enumerate(merged[ID_COLUMN]):
+            if user_id not in kept.index:
+                continue
+            existing = kept.at[user_id, column]
+            if isinstance(existing, pd.Series):  # the old file had duplicate ids
+                existing = existing.iloc[0]
+            if pd.isna(existing) or str(existing).strip() == "":
+                continue
+            merged.iat[row, position_of_column] = existing
+            filled += 1
+    if filled:
+        notes.append(f"kept {_plural(filled, 'score')} already entered in the file")
+
+    fresh_ids = set(pd.to_numeric(merged[ID_COLUMN], errors="coerce").dropna())
+    previous_ids = set(kept.index.dropna())
+    added = fresh_ids - previous_ids
+    gone = previous_ids - fresh_ids
+    if added:
+        notes.append(f"{_plural(len(added), 'student is', 'students are')} new since that file was written")
+    if gone:
+        notes.append(
+            f"{_plural(len(gone), 'student', 'students')} in that file "
+            f"{'is' if len(gone) == 1 else 'are'} no longer enrolled, and their scores were dropped"
+        )
+
+    dropped_columns = [
+        c for c in previous.columns if c not in merged.columns and c not in (NAME_COLUMN, ID_COLUMN, SIS_COLUMN)
+    ]
+    if dropped_columns:
+        listed = ", ".join(repr(c) for c in dropped_columns[:4])
+        notes.append(
+            f"{_plural(len(dropped_columns), 'column is', 'columns are')} not in the rubric any more: {listed}"
+        )
+
+    return merged, notes
+
+
 def write_template(frame: pd.DataFrame, path: str | Path) -> Path:
     """Write the template as XLSX or CSV, inferred from the file extension."""
     path = Path(path)

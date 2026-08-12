@@ -166,3 +166,80 @@ class TestTemplate:
         criteria = (CanvasCriterion("_1", "Design", 10.0),)
         frame = build_template(roster, criteria, existing={101: {"_1": 7.5}})
         assert frame.loc[frame["ID"] == 101, "Design (10)"].iloc[0] == 7.5
+
+
+class TestMergeTemplates:
+    """Re-pulling for an updated roster must not discard hand-entered marks."""
+
+    def _previous(self):
+        import pandas as pd
+
+        return pd.DataFrame(
+            {
+                "Student": ["Ada", "Alan", "Grace"],
+                "ID": [101, 102, 103],
+                "SIS Login ID": ["", "", ""],
+                "Design (10)": [9, 7.5, ""],
+                "Tests (20)": ["", "", ""],
+                "Retired (5)": [1, 2, 3],
+            }
+        )
+
+    def _fresh(self):
+        import pandas as pd
+
+        return pd.DataFrame(
+            {
+                "Student": ["Ada", "Grace", "Katherine"],
+                "ID": [101, 103, 104],
+                "SIS Login ID": ["", "", ""],
+                "Design (10)": ["", "", ""],
+                "Tests (20)": ["", "", ""],
+                "Docs (5)": ["", "", ""],
+            }
+        )
+
+    def test_typed_scores_survive(self) -> None:
+        from canvasgrade.canvas.pull import merge_templates
+
+        merged, _ = merge_templates(self._fresh(), self._previous())
+        assert merged.loc[merged["ID"] == 101, "Design (10)"].iloc[0] == 9
+
+    def test_a_fresh_template_can_take_numbers(self) -> None:
+        # An all-blank column is typed as str by pandas; writing a number into it used
+        # to raise TypeError, which meant --merge crashed on its first real use.
+        from canvasgrade.canvas.pull import merge_templates
+
+        merged, _ = merge_templates(self._fresh(), self._previous())
+        assert merged is not None
+
+    def test_the_roster_wins(self) -> None:
+        from canvasgrade.canvas.pull import merge_templates
+
+        merged, _ = merge_templates(self._fresh(), self._previous())
+        assert set(merged["ID"]) == {101, 103, 104}  # Alan gone, Katherine added
+
+    def test_new_criteria_start_blank(self) -> None:
+        from canvasgrade.canvas.pull import merge_templates
+
+        merged, _ = merge_templates(self._fresh(), self._previous())
+        assert all(str(v).strip() == "" for v in merged["Docs (5)"])
+
+    def test_it_says_what_it_did(self) -> None:
+        from canvasgrade.canvas.pull import merge_templates
+
+        _, notes = merge_templates(self._fresh(), self._previous())
+        joined = " | ".join(notes)
+        assert "kept 1 score already entered" in joined
+        assert "1 student is new" in joined
+        assert "no longer enrolled" in joined
+        assert "Retired (5)" in joined
+
+    def test_a_file_without_an_id_column_is_refused(self) -> None:
+        import pandas as pd
+
+        from canvasgrade.canvas.pull import merge_templates
+        from canvasgrade.errors import CanvasError
+
+        with pytest.raises(CanvasError, match="--force"):
+            merge_templates(self._fresh(), pd.DataFrame({"Student": ["Ada"]}))

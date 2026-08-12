@@ -12,6 +12,16 @@
   criterion. The field already travelled all the way to the API payload — there was
   simply no way to fill it in. The GUI has an input for it under the criterion name.
 - `inspect` accepts `--rename`, so you can see how a renamed rubric reads before pushing.
+- **`pull --merge`** refreshes the roster in a template you have already started
+  filling in. Previously the only options were to be blocked by "already exists" or to
+  `--force` and lose every score typed so far; a roster that changes mid-marking is
+  normal, and losing an afternoon's work to it should not be. Scores are matched on
+  Canvas id, so reordering rows or fixing a name cannot drop one, and it reports what
+  it kept, who joined, who left, and which columns are gone from the rubric.
+- **`canvasgrade help [command]`**, because reaching for `help` first is the habit git,
+  docker and npm all reward. `--help` still works everywhere.
+- **A full command reference** at `docs/commands.md`, with a test that fails if a
+  command or flag is added without documenting it.
 - **The GUI reports progress while pushing.** The bulk job is asynchronous and a bare
   spinner is indistinguishable from a hang, so it now counts the seconds and says how
   many grades are in flight.

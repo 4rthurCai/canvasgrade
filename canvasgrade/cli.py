@@ -14,7 +14,13 @@ import click
 
 from canvasgrade import __version__, render
 from canvasgrade.canvas.client import CanvasSession
-from canvasgrade.canvas.pull import build_template, fetch_existing_scores, fetch_roster, write_template
+from canvasgrade.canvas.pull import (
+    build_template,
+    fetch_existing_scores,
+    fetch_roster,
+    merge_templates,
+    write_template,
+)
 from canvasgrade.canvas.push import push_grades
 from canvasgrade.canvas.rubrics import find_attached_rubric
 from canvasgrade.config import CONFIG_PATH, check_permissions, load_profile
@@ -22,7 +28,7 @@ from canvasgrade.config import write_template as write_config
 from canvasgrade.errors import CanvasGradeError
 from canvasgrade.grading.plan import DEFAULT_COMMENT, GradeOptions
 from canvasgrade.grading.rubric import build_rubric
-from canvasgrade.sheet.reader import list_sheets
+from canvasgrade.sheet.reader import list_sheets, read_sheet
 from canvasgrade.workflow import ColumnOverride, RubricRequest, SheetRequest, load_sheet, prepare_push
 
 CONNECTION_HELP = "Canvas connection"
@@ -60,6 +66,30 @@ def _session(
 @click.version_option(version=__version__, prog_name="canvasgrade")
 def main() -> None:
     """Build Canvas rubrics from a spreadsheet and push grades back."""
+
+
+@main.command("help")
+@click.argument("command_name", required=False)
+@click.pass_context
+def help_command(context: click.Context, command_name: str | None) -> None:
+    """Show help for a command, e.g. 'canvasgrade help push'.
+
+    "--help" works everywhere too; this exists because reaching for "help" first is
+    the habit git, docker and npm all reward.
+    """
+    parent = context.parent
+    assert parent is not None
+    if command_name is None:
+        click.echo(parent.get_help())
+        return
+
+    command = main.get_command(context, command_name)
+    if command is None:
+        known = ", ".join(sorted(main.list_commands(context)))
+        raise click.UsageError(f"No command named {command_name!r}. Available: {known}")
+    # parent already contributes "canvasgrade" to the usage line.
+    with click.Context(command, info_name=command_name, parent=parent) as sub:
+        click.echo(command.get_help(sub))
 
 
 # --------------------------------------------------------------------------- inspect
@@ -325,6 +355,7 @@ def push(input_file: Path, profile_name: str | None, api_url: str | None, api_ke
     help="Template to write (.xlsx or .csv).",
 )
 @click.option("--with-grades", is_flag=True, help="Pre-fill the scores already on Canvas.")
+@click.option("--merge", is_flag=True, help="Refresh the roster but keep scores already typed in the file.")
 @click.option("--force", is_flag=True, help="Overwrite the output file if it exists.")
 def pull(
     profile_name: str | None,
@@ -332,13 +363,20 @@ def pull(
     api_key: str | None,
     output: Path,
     with_grades: bool,
+    merge: bool,
     force: bool,
     **ids: Any,
 ) -> None:
     """Download a ready-to-fill grading template for an assignment."""
     out = render.console()
-    if output.exists() and not force:
-        raise click.ClickException(f"{output} already exists. Pass --force to overwrite it.")
+    if merge and force:
+        raise click.UsageError("--merge and --force cannot be combined - one keeps your work, one discards it.")
+    if merge and not output.exists():
+        raise click.ClickException(f"--merge needs {output} to exist already.")
+    if output.exists() and not (force or merge):
+        raise click.ClickException(
+            f"{output} already exists. Pass --merge to keep the scores in it, or --force to overwrite it."
+        )
 
     session, profile = _session(profile_name, api_url, api_key, **ids)
     course = session.course(profile.require_course())
@@ -349,6 +387,10 @@ def pull(
     existing = fetch_existing_scores(assignment, criteria) if (with_grades and criteria) else {}
 
     frame = build_template(roster, criteria, existing=existing)
+    if merge:
+        frame, notes = merge_templates(frame, read_sheet(output).frame)
+        for note in notes:
+            out.print(f"  [dim]{note}[/]")
     write_template(frame, output)
 
     out.print(f"[bold green]Wrote {output}[/]")
