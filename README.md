@@ -10,6 +10,8 @@ comment and total back — in one command.**
 [![CI](https://github.com/4rthurCai/canvasgrade/actions/workflows/ci.yml/badge.svg)](https://github.com/4rthurCai/canvasgrade/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/license-MIT-blue)](https://github.com/4rthurCai/canvasgrade/blob/master/LICENSE)
 
+English · [简体中文](https://github.com/4rthurCai/canvasgrade/blob/master/docs/README.zh-CN.md)
+
 </div>
 
 ---
