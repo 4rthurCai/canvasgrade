@@ -78,3 +78,8 @@ jobs:
           name: dist
           path: dist/
       - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          # Re-running a release, or moving a tag, should not fail on a version that
+          # is already up. PyPI never lets a version be replaced, so this only ever
+          # skips an identical upload.
+          skip-existing: true
