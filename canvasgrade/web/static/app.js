@@ -568,6 +568,8 @@ function wire() {
 
   $("course").addEventListener("change", (event) => {
     if (event.target.value) loadAssignments(event.target.value);
+    // The rubric list belongs to the course; leaving it would offer another course's.
+    if ($("rubric-mode").value === "existing") loadRubrics();
     refreshReadiness();
   });
   $("assignment").addEventListener("change", onAssignmentChange);

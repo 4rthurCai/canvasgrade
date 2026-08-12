@@ -124,6 +124,40 @@ class TestPush:
         assert result.exit_code != 0
         assert not isinstance(result.exception, AttributeError)
 
+    def test_contradictory_rubric_flags_are_refused(self, runner, gradebook_path, offline) -> None:
+        # Ranking them silently would discard a flag the user deliberately typed.
+        for extra in (
+            ["--create-rubric", "--no-rubric"],
+            ["--create-rubric", "--rubric-id", "7"],
+            ["--rubric-id", "7", "--no-rubric"],
+        ):
+            result = runner.invoke(cli.main, self._args(gradebook_path, "-n", *extra))
+            assert result.exit_code != 0, extra
+            assert "cannot be combined" in result.output, extra
+
+    def test_one_rubric_flag_at_a_time_is_fine(self, runner, gradebook_path, offline) -> None:
+        result = runner.invoke(cli.main, self._args(gradebook_path, "--create-rubric", "-n"))
+        assert result.exit_code == 0, result.output
+
+    def test_rename_reaches_the_rubric(self, runner, gradebook_path, offline) -> None:
+        result = runner.invoke(
+            cli.main,
+            self._args(gradebook_path, "--create-rubric", "-n", "--rename", "M1 Design (10)=Architecture"),
+        )
+        assert result.exit_code == 0, result.output
+        assert "Architecture" in result.output
+        assert "M1 Tests" in result.output  # the others keep their derived names
+
+    def test_rename_rejects_bad_syntax(self, runner, gradebook_path, offline) -> None:
+        result = runner.invoke(cli.main, self._args(gradebook_path, "-n", "--rename", "nonsense"))
+        assert result.exit_code != 0
+        assert "column=new name" in result.output
+
+    def test_rename_names_the_real_criteria_when_the_column_is_wrong(self, runner, gradebook_path, offline) -> None:
+        result = runner.invoke(cli.main, self._args(gradebook_path, "-n", "--rename", "Nope=X"))
+        assert result.exit_code != 0
+        assert "M1 Design (10)" in result.output
+
     def test_missing_ids_are_reported_not_traced(self, runner, gradebook_path, offline) -> None:
         result = runner.invoke(cli.main, ["push", str(gradebook_path), "-I", "M1 *", "-n"])
         assert result.exit_code != 0

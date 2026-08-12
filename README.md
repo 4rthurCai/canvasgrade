@@ -214,6 +214,7 @@ dropdown.
 | `--total sum` | always add the criteria up |
 | `--total sheet` | always use the total column, and fail if it is empty |
 | `--total-column 'P1M1 Total'` | pick which column *is* the total |
+| `--rename 'Q1 (10)=Design'` | rename a criterion for the rubric students see |
 | `--apply-ratio` | multiply the total by the ratio column |
 
 `--apply-ratio` is off by default because a total column has usually had the ratio

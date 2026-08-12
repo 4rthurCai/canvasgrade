@@ -70,7 +70,7 @@ class TestLoadSheet:
         assert ada_forced.total_override == 27  # from "M2 Total (30)"
 
     def test_an_unknown_total_column_lists_the_candidates(self, gradebook_path) -> None:
-        with pytest.raises(MappingError, match="Columns currently read as a total"):
+        with pytest.raises(MappingError, match="Columns currently read as the total"):
             load_sheet(sheet_request(gradebook_path, total_column="Nope"))
 
     def test_a_criterion_can_be_renamed(self, gradebook_path) -> None:

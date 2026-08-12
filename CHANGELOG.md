@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.2.1
+
+### Fixed
+
+- **Contradictory rubric flags were silently ranked.** `--create-rubric --rubric-id 999
+  --no-rubric` ran without complaint and quietly discarded two of them. On a command that
+  writes to student records, a flag you typed should never be thrown away in silence; the
+  combination is now refused.
+- **The rubric dropdown in the GUI did not follow the course.** Switching course while
+  "use an existing rubric" was selected left the previous course's rubrics on offer.
+
+### Added
+
+- `--rename 'Column=Name'` gives the command line the criterion renaming the GUI already
+  had. The column must exist, and the error lists the criteria that do.
+
+### Changed
+
+- The two near-identical helpers behind `--id-column` and `--total-column` are now one.
+  The error when a named column does not exist reports which columns currently hold that
+  role, for whichever role was being set.
+
 ## 0.2.0
 
 Everything here came out of running the tool against real gradebooks.
@@ -45,5 +67,59 @@ Everything here came out of running the tool against real gradebooks.
 
 ## 0.1.0
 
-First release. Builds a Canvas rubric from spreadsheet headers, pushes grades, comments
-and rubric assessments in bulk, and pulls a filled-in template back.
+First release, verified end to end against a live Canvas instance.
+
+### The core idea
+
+A rubric is built from the spreadsheet's own column headers, and Canvas hands back the
+criterion ids in the same response. That removes the two worst steps of doing this by
+hand: there is no rubric id to hunt for in browser dev tools, and no need to score
+somebody in SpeedGrader first to make a fresh rubric usable.
+
+### Reading a real gradebook
+
+Rather than requiring a bare `uid,score,score` file, the detector reads the sheet as it
+is and records why it decided what it did, so `canvasgrade inspect` can explain itself
+and every guess can be overridden:
+
+- A column becomes a criterion only when its header declares a maximum — `Code Quality
+  (35)`, `设计 （10分）`. That rule is what keeps grader initials, ratios and running
+  subtotals out of the rubric. When no header declares one, a maximum is inferred from
+  the data instead.
+- Identity columns, team header rows, per-milestone subtotals, ratio columns and
+  per-criterion comment columns are all recognised.
+- `-I/--include` and `-E/--exclude` narrow a sheet covering several assignments down to
+  the criteria for one, and comment columns follow their criterion out.
+
+### Pushing
+
+- Canvas's asynchronous bulk endpoint: one request per batch instead of two per student.
+- Per-criterion comments from a `<criterion> comment` column.
+- `--total` chooses between the sheet's own total and the sum of criteria;
+  `--apply-ratio` applies a ratio column, off by default because a total column usually
+  has it baked in already.
+- `--use-for-grading` is off by default, since letting Canvas recompute the grade from
+  the rubric would overwrite the sheet's total.
+
+### Not writing by accident
+
+- `-n/--dry-run` builds the whole plan, including the rubric that *would* be created,
+  and sends nothing.
+- Nothing is written until you answer `y`. The rubric is created *after* the
+  confirmation, so declining leaves nothing behind.
+- Errors block a push: a negative total, two rows resolving to the same student, or no
+  student matching the course at all. Scores above a criterion's maximum are capped with
+  a warning, or refused outright with `--no-clamp`.
+- Students resolve by Canvas id, then SIS/login id, then name; name matching tolerates a
+  second script and small typos but stops rather than choose between two plausible
+  people.
+
+### Also in the box
+
+- `pull` writes a template with every enrolled student and criterion column already in
+  place, optionally pre-filled with the scores on Canvas.
+- A local browser GUI, bound to loopback, that never hands the access token to the page.
+- `plot` draws the grade distribution against a fitted normal, with an optional
+  per-criterion breakdown.
+- Credentials come from `~/.canvasgrade.toml`, `$CANVAS_API_KEY` or `--api-key`, in that
+  order of increasing precedence, with named profiles for per-course ids.

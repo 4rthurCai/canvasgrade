@@ -22,7 +22,7 @@ from canvasgrade.config import write_template as write_config
 from canvasgrade.errors import CanvasGradeError
 from canvasgrade.grading.plan import DEFAULT_COMMENT, GradeOptions
 from canvasgrade.sheet.reader import list_sheets
-from canvasgrade.workflow import RubricRequest, SheetRequest, load_sheet, prepare_push
+from canvasgrade.workflow import ColumnOverride, RubricRequest, SheetRequest, load_sheet, prepare_push
 
 CONNECTION_HELP = "Canvas connection"
 
@@ -140,6 +140,13 @@ def inspect(
     "--total-column",
     help="Name of the column holding the total, when the detector picks the wrong one.",
 )
+@click.option(
+    "--rename",
+    "renames",
+    multiple=True,
+    metavar="COLUMN=NAME",
+    help="Rename a criterion for the rubric students see, e.g. --rename 'Q1 (10)=Design'.",
+)
 @click.option("--apply-ratio", is_flag=True, help="Multiply the total by the sheet's ratio column.")
 @click.option("--strict", is_flag=True, help="Treat warnings as errors and refuse to push.")
 @click.option("--comment/--no-comment", "add_comment", default=False, help="Leave a submission comment.")
@@ -173,6 +180,7 @@ def push(input_file: Path, profile_name: str | None, api_url: str | None, api_ke
                 exclude=opts["exclude"],
                 total_column=opts["total_column"],
                 id_column=opts["id_column"],
+                overrides=_rename_overrides(input_file, opts),
             ),
             rubric_request=RubricRequest(
                 mode=_rubric_mode(opts),
@@ -492,6 +500,39 @@ def plot(
 # --------------------------------------------------------------------------- helpers
 
 
+def _rename_overrides(input_file: Path, opts: dict[str, Any]) -> tuple[ColumnOverride, ...]:
+    """Turn --rename pairs into overrides, checking the columns exist first."""
+    renames = _renames(opts["renames"])
+    if not renames:
+        return ()
+
+    prepared = load_sheet(
+        SheetRequest(
+            path=input_file,
+            sheet=_parse_sheet(opts["sheet"]),
+            has_header=not opts["no_header"],
+            id_column=opts["id_column"],
+            total_column=opts["total_column"],
+        )
+    )
+    overrides = []
+    for column_name, new_name in renames.items():
+        column = prepared.mapping.get(column_name)
+        if column is None:
+            known = ", ".join(repr(c.name) for c in prepared.mapping.criteria_columns[:6])
+            raise click.UsageError(f"--rename: no column {column_name!r}. Criteria are: {known}")
+        overrides.append(
+            ColumnOverride(
+                name=column.name,
+                role=column.role,
+                points=column.points,
+                target=column.target,
+                description=new_name,
+            )
+        )
+    return tuple(overrides)
+
+
 def _parse_sheet(value: str) -> str | int:
     """Excel worksheets can be addressed by index or by name."""
     try:
@@ -501,13 +542,41 @@ def _parse_sheet(value: str) -> str | int:
 
 
 def _rubric_mode(opts: dict[str, Any]) -> str:
+    """Work out where the rubric comes from, refusing contradictory instructions.
+
+    Ranking them silently would discard a flag the user deliberately typed, on a
+    command that writes to student records.
+    """
+    given = [
+        flag
+        for flag, present in (
+            ("--create-rubric", opts["create_rubric"]),
+            ("--rubric-id", opts["rubric_id"] is not None),
+            ("--no-rubric", opts["no_rubric"]),
+        )
+        if present
+    ]
+    if len(given) > 1:
+        raise click.UsageError(f"{' and '.join(given)} cannot be combined - pick one.")
+
     if opts["no_rubric"]:
         return "none"
     if opts["create_rubric"]:
         return "create"
-    if opts["rubric_id"]:
+    if opts["rubric_id"] is not None:
         return "existing"
     return "attached"
+
+
+def _renames(pairs: tuple[str, ...]) -> dict[str, str]:
+    """Parse --rename 'Column=Name' into a lookup, complaining about bad syntax."""
+    renames: dict[str, str] = {}
+    for pair in pairs:
+        column, separator, name = pair.partition("=")
+        if not separator or not column.strip() or not name.strip():
+            raise click.UsageError(f"--rename expects 'column=new name', got {pair!r}")
+        renames[column.strip()] = name.strip()
+    return renames
 
 
 def run() -> None:

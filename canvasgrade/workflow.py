@@ -18,7 +18,15 @@ from canvasgrade.grading.plan import GradeOptions, build_plan
 from canvasgrade.grading.roster import Roster
 from canvasgrade.grading.rubric import bind_to_existing, build_rubric
 from canvasgrade.grading.validate import validate_plan
-from canvasgrade.models import ColumnRole, GradePlan, Issue, RubricSpec, SheetMapping, StudentRow
+from canvasgrade.models import (
+    ColumnRole,
+    ColumnSpec,
+    GradePlan,
+    Issue,
+    RubricSpec,
+    SheetMapping,
+    StudentRow,
+)
 from canvasgrade.sheet.detect import detect_mapping
 from canvasgrade.sheet.reader import SheetData, read_sheet
 from canvasgrade.sheet.rows import extract_rows
@@ -118,7 +126,7 @@ def load_sheet(request: SheetRequest) -> PreparedSheet:
     if request.id_column:
         mapping = _force_role(mapping, request.id_column, ColumnRole.CANVAS_ID, "--id-column")
     if request.total_column:
-        mapping = _force_total_column(mapping, request.total_column)
+        mapping = _force_role(mapping, request.total_column, ColumnRole.TOTAL, "--total-column")
     mapping = filter_criteria(mapping, include=request.include, exclude=request.exclude)
     rows = extract_rows(data.frame, mapping)
     if not rows:
@@ -164,68 +172,42 @@ def _resolve_single_roles(mapping: SheetMapping) -> SheetMapping:
     return mapping
 
 
-def _force_total_column(mapping: SheetMapping, name: str) -> SheetMapping:
-    """Make ``name`` the total column, demoting whichever one the detector picked.
-
-    Matching is case-insensitive and tolerates the max-score suffix being left off, so
-    both ``--total-column 'P1M1 Total (70)'`` and ``--total-column 'P1M1 Total'`` work.
-    """
-    from canvasgrade.sheet.detect import normalise, parse_points, strip_points
+def _find_column(mapping: SheetMapping, name: str) -> ColumnSpec | None:
+    """Locate a column by header, case-insensitively and with the max marker optional."""
+    from canvasgrade.sheet.detect import normalise, strip_points
 
     wanted = normalise(name)
-    chosen = next(
-        (
-            column
-            for column in mapping.columns
-            if wanted in (normalise(column.name), normalise(strip_points(column.name)))
-        ),
+    return next(
+        (c for c in mapping.columns if wanted in (normalise(c.name), normalise(strip_points(c.name)))),
         None,
-    )
-    if chosen is None:
-        available = ", ".join(repr(c.name) for c in mapping.by_role(ColumnRole.TOTAL)) or "none detected"
-        raise MappingError(
-            f"No column named {name!r}. Columns currently read as a total: {available}. "
-            "Run 'canvasgrade inspect' to list every column."
-        )
-
-    for column in mapping.by_role(ColumnRole.TOTAL):
-        if column.name != chosen.name:
-            mapping = mapping.override(
-                column.name,
-                ColumnRole.IGNORE,
-                reason=f"--total-column chose '{chosen.name}' instead",
-            )
-    # The chosen column may have been demoted during detection, which drops its max, so
-    # read it back off the header rather than trusting what survived.
-    return mapping.override(
-        chosen.name,
-        ColumnRole.TOTAL,
-        points=chosen.points if chosen.points is not None else parse_points(chosen.name),
-        reason="named by --total-column",
     )
 
 
 def _force_role(mapping: SheetMapping, name: str, role: ColumnRole, flag: str) -> SheetMapping:
-    """Give ``name`` a role by hand, demoting whichever column the detector chose."""
-    from canvasgrade.sheet.detect import normalise, strip_points
+    """Give ``name`` a role by hand, demoting whichever column the detector chose.
 
-    wanted = normalise(name)
-    chosen = next(
-        (
-            column
-            for column in mapping.columns
-            if wanted in (normalise(column.name), normalise(strip_points(column.name)))
-        ),
-        None,
-    )
+    The chosen column may have been demoted during detection, which drops its max, so
+    the max is read back off the header rather than trusting what survived.
+    """
+    from canvasgrade.sheet.detect import parse_points
+
+    chosen = _find_column(mapping, name)
     if chosen is None:
-        available = ", ".join(repr(c.name) for c in mapping.columns[:8])
-        raise MappingError(f"No column named {name!r}. The sheet has: {available} ...")
+        current = ", ".join(repr(c.name) for c in mapping.by_role(role)) or "none detected"
+        raise MappingError(
+            f"No column named {name!r}. Columns currently read as the {role.value.replace('_', ' ')}: "
+            f"{current}. Run 'canvasgrade inspect' to list every column."
+        )
 
     for column in mapping.by_role(role):
         if column.name != chosen.name:
             mapping = mapping.override(column.name, ColumnRole.IGNORE, reason=f"{flag} chose '{chosen.name}' instead")
-    return mapping.override(chosen.name, role, reason=f"named by {flag}")
+    return mapping.override(
+        chosen.name,
+        role,
+        points=chosen.points if chosen.points is not None else parse_points(chosen.name),
+        reason=f"named by {flag}",
+    )
 
 
 def diagnose_identity(prepared: PreparedSheet, roster: Roster, plan: GradePlan) -> str | None:
