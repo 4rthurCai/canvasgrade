@@ -2,7 +2,7 @@
 
 # canvasgrade
 
-**直接用你现成的 Excel/csv 成绩表格在 Canvas 上建 rubric，然后把分数、评语和总分一次推上去。**
+**概念源自[canvas-auto-rubric](https://github.com/tc-imba/canvas-auto-rubric)，对该项目进行了改进**
 
 [![PyPI](https://img.shields.io/pypi/v/canvasgrade?color=1f4ea1)](https://pypi.org/project/canvasgrade/)
 [![Python](https://img.shields.io/pypi/pyversions/canvasgrade)](https://pypi.org/project/canvasgrade/)
@@ -15,7 +15,11 @@
 
 ---
 
-不用去 Chrome DevTools 里找 rubric ID，不用把成绩表裁成只剩学号和分数的 csv，也不用先去 Canvas 上新建的 rubric。
+**算我求求你们了，多测试一下，提点issue**
+
+## 主要功能
+
+可以通过Excel/CSV表格直接生成Rubric，并且操作与git类似，使用pull/push
 
 ```bash
 pip3 install "canvasgrade[all]"
@@ -23,9 +27,9 @@ canvasgrade push grades.xlsx --create-rubric --dry-run   # 先看
 canvasgrade push grades.xlsx --create-rubric             # 再推
 ```
 
-## 解决的问题
+## inspect
 
-canvasgrade 能直接读你现有的表，并且在写任何东西之前，告诉你它把每一列理解成了什么。
+可以用`inspect`指令看识别结果（识别通过正则表达式，不一定保证准确）
 
 `canvasgrade inspect grades.xlsx`：
 
@@ -42,11 +46,11 @@ canvasgrade 能直接读你现有的表，并且在写任何东西之前，告�
 > 44 名学生，44 人表里有总分，文件共 44 行
 > 4 个 criteria 合计 70 分
 
-**每个判断都附带理由，每个判断都能改。** `inspect` 完全离线，不需要 token。
+`inspect` 是离线指令，不会推送到Canvas。
 
-## 写之前先看
+## dry run （同 Joint Teapot）
 
-`--dry-run` 会把整个方案算出来——包括**将要创建**的那个 rubric——但什么都不发送：
+`--dry-run` 在不推送情况下可以看到所有推送情况，包括分数（可以认为是高级版inspect）
 
 ```bash
 canvasgrade push grades.xlsx --create-rubric --dry-run
@@ -77,17 +81,16 @@ canvasgrade push grades.xlsx --create-rubric --dry-run
 
 criterion ID 显示成 `_preview_N`，是因为还什么都没创建。确认之后它们会变成 Canvas 返回的真实 ID。
 
-## 它做什么
+## 这个项目能做什么？
 
-| | |
-|---|---|
-| **替你建 rubric** | 表头变成 criteria。API 直接返回 criterion ID，所以没有 ID 要查。 |
-| **读你真实的表** | 身份列、队名分隔行、ratio、阶段小计、打分人姓名列全都能识别——不是分数的那些不会混进 rubric。 |
-| **一次批量推送** | 走 Canvas 的异步批量接口：每批一次请求，而不是每个学生两次。 |
-| **逐条评语** | `Design comment` 这样的列会变成挂在该 criterion 上的反馈。 |
-| **闭环** | `pull` 生成填空模板，学生和 criteria 都已就位；填完直接把同一份文件推回去。 |
-| **安全稳定** | 学生按 Canvas ID → SIS/登录 ID → 姓名依次匹配，两个人同样像的时候宁可停下来也不猜。 |
-| **允许纠正** | 每个识别出的角色、criterion 名称和满分都能覆盖，命令行和 GUI 都可以，在创建任何东西之前。 |
+- 支持自动帮你把 Excel/CSV 变成 Rubric
+- 支持自动读取并使用已有Rubric
+- 使用 Canvas 的异步批量接口
+- 允许使用 `Design comment` 这样的列，转换为挂在该 criterion 上的反馈
+- 支持 `pull` 生成填空模板，包含学生信息和 criteria
+- 支持GUI和CLI两种形式，都拥有推送前离线预览功能
+- 支持 plot 功能拉线，计算 Q1, Q2, Q3 以及每题平均得分
+- 不用开 Dev Tools 遍地找 Rubric id 啦！
 
 ## 安装
 
@@ -97,13 +100,13 @@ pip3 install canvasgrade              # 只要命令行
 pip3 install "canvasgrade[web]"       # 命令行 + 网页 GUI
 ```
 
-需要 Python 3.11 或更高。
+要求： Python 3.11 或更高。
 
-> **项目刚刚开启** 创建 rubric、批量推送分数和评语、拉取填空模板都已对真实 Canvas 端到端验证过，但使用者还很少。每次写入前都有预览和确认，`--dry-run` 什么都不发送——请先用它。
+> **项目刚刚开启** 创建 rubric、批量推送分数和评语、拉取填空模板都已对真实 Canvas 端到端验证过，但使用者还很少。
 
 ## 配置
 
-在 **账户 → 设置 → 新建访问令牌** 生成 token，然后：
+在 Canvas 上 **账户 → 设置 → 新建访问令牌** 生成 token，然后：
 
 ```bash
 canvasgrade config init     # 生成 ~/.canvasgrade.toml，权限 600
@@ -113,7 +116,7 @@ canvasgrade assignments     # 作业 ID，以及哪些已挂 rubric
 canvasgrade rubrics         # rubric ID，供 --rubric-id 使用
 ```
 
-**任何 ID 都不需要从浏览器开发者工具里扒。**
+写入toml：
 
 ```toml
 # ~/.canvasgrade.toml
@@ -127,7 +130,7 @@ assignment_id = 7081
 
 然后 `canvasgrade push grades.xlsx -p vv186`。`$CANVAS_API_KEY` 和 `--api-key` 也可以，优先级是：命令行参数 > 环境变量 > 配置文件。
 
-## 表头怎么被识别
+## 表头怎么被识别 （这部分是AI写的）
 
 **表头声明了满分，这一列就是一个 rubric criterion：**
 
@@ -141,28 +144,42 @@ assignment_id = 7081
 | `P1 Total (70)` | 作业总分 |
 | `Ratio`、`Weight`、`系数` | 乘数，除非加 `--apply-ratio` 否则忽略 |
 | `Code Quality comment` | 该 criterion 上的逐人评语 |
+| `Deduction`、`扣分` | 忽略——没声明满分；`--criterion 'Deduction=0'` 可以放进去 |
 | `Joe`、`Vonda` | 忽略——是数值列，但没声明满分 |
 
 几条值得知道的规则：
 
 - **只有明确声明满分的表头才会成为 criterion。** 圆括号或方括号、半角或全角，可以带单位（`分`、`pts`）和末尾的撇号。正是这条规则把打分人姓名、ratio、小计挡在 rubric 外面。如果**整张表**都没有任何表头声明满分，才会退而从数据里推断。
-- **声明了满分就压过除总分外的一切。** `Bug reports (team) [5]` 是一个 criterion，不是队伍列。
-- **末尾光秃秃的数字永远不算分数。** `Milestone 2` 保持原样。
-- **多个列看起来都像总分时，取最后一个**——用 `--total-column` 覆盖。
-- **有姓名但没有 ID 也没有分数的行是队名行**，下面的行继承这个队名。
+- **声明了满分就压过关键字。** `Bug reports (team) [5]` 是一个 criterion，不是队伍列——除非整个表头就是一个角色名，所以 `Weight (1)` 仍然是写明了量程的 ratio 列。
+- **末尾光秃秃的数字永远不算分数。** `Milestone 2` 不会被认作 2 分的 milestone。
+- **多个列看起来都像总分时，取最后一个** 支持用 `--total-column` 覆盖。
+- **有姓名但没有 ID 也没有分数的行是队名行**，下面的行继承这个队名，队名列通常会被无视。
 
-`canvasgrade inspect <文件>` 会显示每一列命中了哪条规则，**以及将要建出的 rubric**——criterion 名称、满分、合计——不需要 token、作业 ID 或任何网络访问。
+`canvasgrade inspect <文件>` 会显示每一列命中了哪条规则，以及将要建出的 rubric。
 
-## 一张表对应多个作业
+## 把表里其余的列也放进 rubric
+
+「必须声明满分才算 criterion」这条规则把扣分、加分、记账类的列挡在 rubric 外面。默认这样是对的，但如果你本来就想让它们全进去：
+
+```bash
+canvasgrade push grades.xlsx --criterion 'Late Penalty=0' --criterion 'Bonus=5'
+canvasgrade push grades.xlsx --all-criteria
+```
+
+`--criterion 'COLUMN=MAX'` 强制把某一列变成 criterion。扣分列的满分是 **0**——真正为负的是里面的分数，写负数满分会被拒绝。不写 `=MAX` 就从表头取，所以 `--criterion 'M1 Total (30)'` 可以把小计放回 rubric。
+
+`--all-criteria` 把所有含数字的列全部收进去。满分优先取表头声明的，否则取该列的最大值——所以一定要看预览：一个没人拿到 1 分以上的 `Bonus` 列会被推断成满分 1，用 `--criterion 'Bonus=5'` 纠正。身份列、总分列和评语列永远不会被收进去，打分人姓名那种不含数字的列会被跳过。
+
+## 支持一张表针对多个项目（例如多 milestone）
 
 ```bash
 canvasgrade push "p1.xlsx" --create-rubric -I 'P1M1 *' --total sum -a 7081
 canvasgrade push "p1.xlsx" --create-rubric -I 'P1M2 *' --total sum -a 7082
 ```
 
-**筛选改变的是 criteria，不是总分。** 用默认的 `--total auto` 时，分数仍然来自表格最后那个总分列——对三个里程碑的表来说那是整个项目的总分。所以推单个里程碑通常要同时加 `--total sum`，或者 `--total-column 'P1M1 Total'`。`--dry-run` 会同时显示两者，推之前就能看出对不上。
+**筛选改变的是 criteria，不是总分。** 用默认的 `--total auto` 时，分数仍然来自表格最后那个总分列——对三个里程碑的表来说那是整个项目的总分。所以推单个里程碑通常要同时加 `--total sum`，或者 `--total-column 'P1M1 Total'`。
 
-## 学生匹配不上时
+## 使用的ID（当有多个ID列时）
 
 成绩表里通常同时有 Canvas 用户 ID 和学号，而**光看数字分不出哪个是哪个**——两者都是整数，Canvas ID 有几位只取决于那个实例有多老。所以工具去问Canvas名单：
 
@@ -181,14 +198,14 @@ canvasgrade push "p1.xlsx" --create-rubric -I 'P1M2 *' --total sum -a 7082
 
 同时传多个会被拒绝，而不是静默排序取其一。
 
-## 总分从哪来
+## 总分
 
 | 参数 | 行为 |
 |---|---|
 | `--total auto`（默认） | 表里有总分列就用它，否则用各项之和 |
 | `--total sum` | 一律用各项之和 |
 | `--total sheet` | 一律用总分列，为空则报错 |
-| `--total-column 'P1M1 Total'` | 指定哪一列**是**总分 |
+| `--total-column 'P1M1 Total'` | 指定哪一列是总分 |
 | `--rename 'Q1 (10)=设计'` | 改 criterion 在 rubric 上显示的名字 |
 | `--describe 'Q1 (10)=…'` | 学生点开该 criterion 时看到的详细说明 |
 | `--apply-ratio` | 总分乘以 ratio 列 |
@@ -249,7 +266,7 @@ canvasgrade help push        # 单个命令的详情
 
 ## 更新日志
 
-见 [CHANGELOG.md](https://github.com/4rthurCai/canvasgrade/blob/master/CHANGELOG.md)（英文）。
+见 [CHANGELOG.md](https://github.com/4rthurCai/canvasgrade/blob/master/CHANGELOG.md)。
 
 ## 参与开发
 
@@ -260,7 +277,7 @@ python3 -m venv .venv && .venv/bin/pip install -e ".[dev]"
 .venv/bin/ruff check canvasgrade tests
 ```
 
-**永远不要在git上提交真实成绩表。** `tests/fixtures/` 下的测试数据全部是合成的，必须保持如此；`.gitignore` 挡住了常见情况，但那不能替代你自己看一眼将要提交什么。
+**开发中永远不要在git上提交真实成绩表。** `tests/fixtures/` 下的测试数据全部是合成的，必须保持如此；`.gitignore` 挡住了常见情况，但那不能替代你自己看一眼将要提交什么。
 
 ## 许可
 
