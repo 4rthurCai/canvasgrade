@@ -28,6 +28,8 @@ from canvasgrade.config import write_template as write_config
 from canvasgrade.errors import CanvasGradeError
 from canvasgrade.grading.plan import DEFAULT_COMMENT, GradeOptions
 from canvasgrade.grading.rubric import build_rubric
+from canvasgrade.models import ColumnRole, ColumnSpec, SheetMapping
+from canvasgrade.sheet.detect import parse_points
 from canvasgrade.sheet.reader import list_sheets, read_sheet
 from canvasgrade.workflow import ColumnOverride, RubricRequest, SheetRequest, load_sheet, prepare_push
 
@@ -110,6 +112,14 @@ def help_command(context: click.Context, command_name: str | None) -> None:
     metavar="COLUMN=NAME",
     help="Rename a criterion, to see how the rubric would read.",
 )
+@click.option(
+    "--criterion",
+    "criteria",
+    multiple=True,
+    metavar="COLUMN[=MAX]",
+    help="Force a column into the rubric, e.g. --criterion 'Deduction=0'.",
+)
+@click.option("--all-criteria", is_flag=True, help="Put every column that can hold a score in the rubric.")
 @click.option("--columns-only", is_flag=True, help="Skip the rubric preview.")
 def inspect(
     input_file: Path,
@@ -120,6 +130,8 @@ def inspect(
     total_column: str | None,
     id_column: str | None,
     renames: tuple[str, ...],
+    criteria: tuple[str, ...],
+    all_criteria: bool,
     columns_only: bool,
 ) -> None:
     """Show how a spreadsheet will be read. Touches no network."""
@@ -135,13 +147,16 @@ def inspect(
             has_header=not no_header,
             include=include,
             exclude=exclude,
+            all_criteria=all_criteria,
             total_column=total_column,
             id_column=id_column,
-            overrides=_rename_overrides(
+            overrides=_column_overrides(
                 input_file,
                 {
                     "renames": renames,
                     "describes": (),
+                    "criteria": criteria,
+                    "all_criteria": all_criteria,
                     "sheet": sheet,
                     "no_header": no_header,
                     "id_column": id_column,
@@ -153,8 +168,8 @@ def inspect(
     out.print(render.mapping_table(prepared.mapping))
     out.print()
 
-    criteria = prepared.mapping.criteria_columns
-    if not criteria:
+    criteria_columns = prepared.mapping.criteria_columns
+    if not criteria_columns:
         out.print("[yellow]No criteria found. Headers need a max score, e.g. 'Code Quality (35)'.[/]")
     elif not columns_only:
         # The rubric is what actually gets created, so show it as a rubric - offline,
@@ -168,9 +183,9 @@ def inspect(
             out.print()
 
     out.print(f"[bold]{render.rows_summary(prepared.rows)}[/] from {prepared.data.n_rows} rows in the file")
-    if criteria:
-        total = sum(c.points or 0 for c in criteria)
-        out.print(f"[bold]{len(criteria)} criteria[/] worth [bold]{total:g}[/] points in total")
+    if criteria_columns:
+        total = sum(c.points or 0 for c in criteria_columns)
+        out.print(f"[bold]{len(criteria_columns)} criteria[/] worth [bold]{total:g}[/] points in total")
 
 
 # --------------------------------------------------------------------------- push
@@ -217,6 +232,14 @@ def inspect(
     metavar="COLUMN=TEXT",
     help="Detail text Canvas shows when a student opens that criterion.",
 )
+@click.option(
+    "--criterion",
+    "criteria",
+    multiple=True,
+    metavar="COLUMN[=MAX]",
+    help="Force a column into the rubric, e.g. --criterion 'Deduction=0'.",
+)
+@click.option("--all-criteria", is_flag=True, help="Put every column that can hold a score in the rubric.")
 @click.option("--apply-ratio", is_flag=True, help="Multiply the total by the sheet's ratio column.")
 @click.option("--strict", is_flag=True, help="Treat warnings as errors and refuse to push.")
 @click.option("--comment/--no-comment", "add_comment", default=False, help="Leave a submission comment.")
@@ -229,6 +252,11 @@ def inspect(
 def push(input_file: Path, profile_name: str | None, api_url: str | None, api_key: str | None, **opts: Any) -> None:
     """Push grades from a spreadsheet to Canvas."""
     out = render.console()
+    if opts["all_criteria"] and opts["apply_ratio"]:
+        raise click.UsageError(
+            "--all-criteria scores the ratio column as a criterion, leaving --apply-ratio "
+            "nothing to apply. Use --criterion to name the columns you want instead."
+        )
     session, profile = _session(
         profile_name,
         api_url,
@@ -248,9 +276,10 @@ def push(input_file: Path, profile_name: str | None, api_url: str | None, api_ke
                 has_header=not opts["no_header"],
                 include=opts["include"],
                 exclude=opts["exclude"],
+                all_criteria=opts["all_criteria"],
                 total_column=opts["total_column"],
                 id_column=opts["id_column"],
-                overrides=_rename_overrides(input_file, opts),
+                overrides=_column_overrides(input_file, opts),
             ),
             rubric_request=RubricRequest(
                 mode=_rubric_mode(opts),
@@ -582,40 +611,98 @@ def plot(
 # --------------------------------------------------------------------------- helpers
 
 
-def _rename_overrides(input_file: Path, opts: dict[str, Any]) -> tuple[ColumnOverride, ...]:
-    """Turn --rename pairs into overrides, checking the columns exist first."""
+def _column_overrides(input_file: Path, opts: dict[str, Any]) -> tuple[ColumnOverride, ...]:
+    """Turn --rename/--describe/--criterion into overrides, checking the columns exist."""
     renames = _renames(opts["renames"], "--rename")
     describes = _renames(opts.get("describes", ()), "--describe")
-    if not renames and not describes:
+    forced = _forced_criteria(opts.get("criteria", ()))
+    if not renames and not describes and not forced:
         return ()
 
+    # Read the sheet once to resolve the names the user typed. --all-criteria is
+    # applied here too, so --criterion can adjust a max it inferred rather than
+    # fighting it.
     prepared = load_sheet(
         SheetRequest(
             path=input_file,
             sheet=_parse_sheet(opts["sheet"]),
             has_header=not opts["no_header"],
+            all_criteria=opts.get("all_criteria", False),
             id_column=opts["id_column"],
             total_column=opts["total_column"],
         )
     )
     overrides = []
-    for column_name in {**renames, **describes}:
+    for column_name in {**renames, **describes, **forced}:
         column = prepared.mapping.get(column_name)
         if column is None:
-            known = ", ".join(repr(c.name) for c in prepared.mapping.criteria_columns[:6])
-            flag = "--rename" if column_name in renames else "--describe"
-            raise click.UsageError(f"{flag}: no column {column_name!r}. Criteria are: {known}")
+            raise _unknown_column(column_name, prepared.mapping, renames, forced)
+        role, points = column.role, column.points
+        if column_name in forced:
+            role, points = ColumnRole.CRITERION, _forced_max(column_name, forced[column_name], column)
         overrides.append(
             ColumnOverride(
                 name=column.name,
-                role=column.role,
-                points=column.points,
+                role=role,
+                points=points,
                 target=column.target,
                 description=renames.get(column_name, column.description),
                 long_description=describes.get(column_name, column.long_description),
             )
         )
     return tuple(overrides)
+
+
+def _unknown_column(
+    name: str,
+    mapping: SheetMapping,
+    renames: dict[str, str],
+    forced: dict[str, float | None],
+) -> click.UsageError:
+    """Name the columns that do exist, so a typo does not need a second run to find."""
+    if name in forced:
+        # --criterion deliberately targets columns that are *not* criteria yet, so
+        # listing only the criteria would be no help at all.
+        known = ", ".join(repr(c.name) for c in mapping.columns[:8])
+        return click.UsageError(f"--criterion: no column {name!r}. Columns are: {known}")
+    known = ", ".join(repr(c.name) for c in mapping.criteria_columns[:6])
+    flag = "--rename" if name in renames else "--describe"
+    return click.UsageError(f"{flag}: no column {name!r}. Criteria are: {known}")
+
+
+def _forced_max(name: str, given: float | None, column: ColumnSpec) -> float:
+    """Settle the max for a --criterion column: the one given, else the one we know."""
+    for candidate in (given, column.points, parse_points(column.name)):
+        if candidate is not None:
+            return candidate
+    raise click.UsageError(
+        f"--criterion: {name!r} declares no max score and none was given. "
+        f"Write --criterion '{name}=10' to set one, or 0 if it only ever takes marks away."
+    )
+
+
+def _forced_criteria(pairs: tuple[str, ...]) -> dict[str, float | None]:
+    """Parse --criterion 'COLUMN' or --criterion 'COLUMN=MAX'."""
+    forced: dict[str, float | None] = {}
+    for pair in pairs:
+        name, separator, raw = pair.partition("=")
+        name = name.strip()
+        if not name:
+            raise click.UsageError(f"--criterion: expected COLUMN or COLUMN=MAX, got {pair!r}")
+        if not separator:
+            forced[name] = None
+            continue
+        try:
+            points = float(raw.strip())
+        except ValueError:
+            raise click.UsageError(f"--criterion: {raw.strip()!r} is not a number, in {pair!r}") from None
+        if points < 0:
+            raise click.UsageError(
+                f"--criterion: a max cannot be negative, in {pair!r}. A deduction column's "
+                f"max is 0 - the scores in it are what go below zero."
+            )
+        forced[name] = points
+    return forced
 
 
 def _parse_sheet(value: str) -> str | int:

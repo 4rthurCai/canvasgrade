@@ -89,6 +89,21 @@ def squash(header: str) -> str:
     return re.sub(r"[^0-9a-z\u4e00-\u9fff]+", "", normalise(header))
 
 
+#: Roles a header can claim by name alone. Matched against the whole header with its
+#: max marker stripped and its separators squashed, which is what separates the two
+#: cases that used to collide: "Weight (1)" is the ratio column with its scale spelled
+#: out, while "Bug reports (team) [5]" is a criterion that merely mentions a team.
+#: Totals are deliberately absent - they keep substring matching, because a subtotal is
+#: normally written "M1 Total (30)" and must never be scored as a criterion.
+EXACT_ROLE_NAMES: tuple[tuple[ColumnRole, frozenset[str]], ...] = (
+    (ColumnRole.NAME, frozenset(squash(n) for n in NAME_NAMES)),
+    (ColumnRole.SIS_ID, frozenset(squash(t) for t in SIS_TOKENS)),
+    (ColumnRole.CANVAS_ID, CANVAS_ID_STRONG | CANVAS_ID_WEAK),
+    (ColumnRole.TEAM, frozenset(squash(t) for t in TEAM_TOKENS)),
+    (ColumnRole.RATIO, frozenset(squash(t) for t in RATIO_TOKENS)),
+)
+
+
 def parse_header(header: str) -> tuple[str, float | None]:
     """Split a header into its criterion name and its declared max score.
 
@@ -131,6 +146,15 @@ def _contains(text: str, tokens: tuple[str, ...]) -> str | None:
     return None
 
 
+def _exact_role(name: str) -> ColumnRole | None:
+    """The role a header claims outright, or ``None`` if it just mentions a keyword."""
+    squashed = squash(name)
+    for role, names in EXACT_ROLE_NAMES:
+        if squashed in names:
+            return role
+    return None
+
+
 def _comment_base(header: str) -> str | None:
     """If the header looks like a comment column, return the name it annotates."""
     text = normalise(header)
@@ -170,6 +194,13 @@ def _classify(header: str, index: int, series: pd.Series, explicit_points_presen
         if matched:
             # "P1 Total (70)" is a sum of criteria and must not be pushed as one.
             return spec(ColumnRole.TOTAL, f"header contains '{matched}'", points=points)
+        # Unless the header is a role name and nothing else. "Weight (1)" is the ratio
+        # column stating its scale, and putting a multiplier in the rubric is worse
+        # than dropping a criterion, because the marks it scales are in there too.
+        named = _exact_role(strip_points(header))
+        if named is not None:
+            label = named.value.replace("_", " ")
+            return spec(named, f"header names the {label} column, despite the max")
         return spec(ColumnRole.CRITERION, f"header declares a max of {points:g}", points=points)
 
     # Identity columns first: "SIS Login ID" also contains "id", so order matters.
@@ -303,6 +334,53 @@ def _resolve_comment_targets(columns: list[ColumnSpec]) -> list[ColumnSpec]:
                 )
             )
     return resolved
+
+
+#: Roles that stay out of the rubric however hard a user asks. Identity columns hold no
+#: score, a comment column is feedback *on* a criterion, and the total is the grade
+#: itself - scoring it as a criterion would count every mark in the sheet twice.
+NEVER_CRITERIA = frozenset(
+    {
+        ColumnRole.CANVAS_ID,
+        ColumnRole.SIS_ID,
+        ColumnRole.NAME,
+        ColumnRole.COMMENT,
+        ColumnRole.TOTAL,
+    }
+)
+
+
+def promote_all_to_criteria(frame: pd.DataFrame, mapping: SheetMapping) -> SheetMapping:
+    """Make every column that can hold a score a rubric criterion.
+
+    The detector's rule - a criterion must declare a max - keeps penalty, bonus and
+    bookkeeping columns out of the rubric, which is right by default and tedious when
+    the whole sheet is meant to go in. This is the blunt instrument behind
+    ``--all-criteria``; ``--criterion`` is the one-column version.
+
+    A max comes from the header if it declares one, else from the largest value in the
+    column. A column holding only zeroes and negatives is a deduction, so its max
+    really is 0. A column holding no numbers at all cannot be a score and is left where
+    it is.
+    """
+    for column in mapping.columns:
+        if column.role in NEVER_CRITERIA or column.role is ColumnRole.CRITERION:
+            continue
+        series = frame.iloc[:, column.index]
+        if not _is_numericish(series):
+            continue
+
+        declared = column.points if column.points is not None else parse_points(column.name)
+        if declared is not None:
+            points, reason = declared, f"--all-criteria: max {declared:g} from the header"
+        else:
+            observed = _observed_max(series)
+            if observed is None:
+                points, reason = 0.0, "--all-criteria: no positive value, read as a deduction (max 0)"
+            else:
+                points, reason = observed, f"--all-criteria: max {observed:g} inferred from data"
+        mapping = mapping.override(column.name, ColumnRole.CRITERION, points=points, reason=reason)
+    return mapping
 
 
 def detect_mapping(frame: pd.DataFrame, *, has_header: bool = True) -> SheetMapping:

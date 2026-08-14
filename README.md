@@ -93,7 +93,7 @@ become the real ids Canvas hands back.
 | | |
 |---|---|
 | **Builds the rubric for you** | Column headers become criteria. The API hands back the criterion ids, so there is nothing to look up and no need to warm up a new rubric in SpeedGrader. |
-| **Reads your real sheet** | Identity columns, team header rows, ratios, per-milestone subtotals and grader initials are all recognised — and the ones that are not scores stay out of the rubric. |
+| **Reads your real sheet** | Identity columns, team header rows, ratios and per-milestone subtotals each get their own role; anything else without a declared maximum — grader initials, running notes — stays out of the rubric until you ask for it. |
 | **Pushes in one batch** | Canvas's asynchronous bulk endpoint: one request per batch instead of two per student. |
 | **Per-criterion comments** | A `Design comment` column becomes feedback attached to that criterion. |
 | **Closes the loop** | `pull` writes a template with every student and criterion already filled in; fill in the numbers and push the same file back. |
@@ -156,6 +156,7 @@ A header that declares a maximum becomes a rubric criterion:
 | `P1 Total (70)` | the assignment total |
 | `Ratio`, `Weight`, `系数` | a multiplier, ignored unless `--apply-ratio` |
 | `Code Quality comment` | per-student feedback on that criterion |
+| `Deduction`, `扣分` | ignored — no declared maximum; `--criterion 'Deduction=0'` puts it in |
 | `Joe`, `Vonda` | ignored — numeric, but no declared maximum |
 
 Rules worth knowing:
@@ -164,8 +165,9 @@ Rules worth knowing:
   ASCII or full-width, optionally with a unit (`分`, `pts`) and a trailing prime. That
   rule keeps bookkeeping columns out of your rubric. If *no* header declares a maximum,
   a maximum is inferred from the data instead.
-- **A declared maximum outranks everything but a total.** `Bug reports (team) [5]` is a
-  criterion, not the team column.
+- **A declared maximum outranks a keyword.** `Bug reports (team) [5]` is a criterion, not
+  the team column — unless the header is a role name and nothing else, so `Weight (1)` is
+  still the ratio column stating its scale.
 - **A bare trailing number is never a score.** `Milestone 2` keeps its name.
 - **When several columns look like totals, the last one wins** — override with
   `--total-column`.
@@ -175,6 +177,27 @@ Rules worth knowing:
 `canvasgrade inspect <file>` shows which rule each column hit **and the rubric it would
 build** — criterion names, maxima and the total — without a token, an assignment id or
 any network access.
+
+## Putting the rest of the sheet in the rubric
+
+The rule that a criterion must declare a maximum keeps penalty, bonus and bookkeeping
+columns out of your rubric, which is right by default and wrong when you meant them all
+to go in:
+
+```bash
+canvasgrade push grades.xlsx --criterion 'Late Penalty=0' --criterion 'Bonus=5'
+canvasgrade push grades.xlsx --all-criteria
+```
+
+`--criterion 'COLUMN=MAX'` forces one column in. A penalty column's maximum is **0** — the
+scores in it are what go below zero — and a negative maximum is refused. Drop the `=MAX`
+and it comes from the header, so `--criterion 'M1 Total (30)'` puts a subtotal back.
+
+`--all-criteria` takes every column with a number in it. Maxima come from the header
+where declared and from the largest value in the column otherwise, so check the preview:
+a `Bonus` column where nobody scored above 1 is inferred as being out of 1, and
+`--criterion 'Bonus=5'` corrects it. Identity columns, the total and comment columns are
+never swept up, and a column of grader initials is skipped because it holds no numbers.
 
 ## One sheet, several assignments
 

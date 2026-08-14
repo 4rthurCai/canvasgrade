@@ -1,5 +1,29 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- **`--criterion 'COLUMN[=MAX]'`** forces a column into the rubric. Only headers that
+  declare a maximum became criteria, which is the right default — it is what keeps grader
+  initials and running notes out of your rubric — but it left no way at all to score a
+  penalty or bonus column short of editing the spreadsheet's headers. A penalty column's
+  maximum is 0, so that is accepted and a negative one is refused; omit the `=MAX` and it
+  comes from the header, which puts a per-milestone subtotal back.
+- **`--all-criteria`** does the same for every column that holds a number. Maxima come
+  from the header where declared and from the column's largest value otherwise, and a
+  column of zeroes and negatives is read as a deduction worth 0. Identity columns, the
+  total and comment columns are never swept up — scoring the total would count every mark
+  twice — so it is refused alongside `--apply-ratio`, which it would leave nothing to do.
+
+### Fixed
+
+- **`Weight (10)` was read as a criterion worth ten points.** A declared maximum outranked
+  the ratio and team keywords, which is what stops `Bug reports (team) [5]` being mistaken
+  for the team column — but it also put a multiplier in the rubric, next to the marks it
+  was supposed to scale. The keyword now wins when it is the *whole* header, and loses
+  when it is one word inside a longer one, so both headers are read the way they look.
+
 ## 0.3.0
 
 ### Added

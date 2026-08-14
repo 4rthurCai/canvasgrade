@@ -6,7 +6,13 @@ import pytest
 
 from canvasgrade.errors import MappingError, SheetError
 from canvasgrade.models import ColumnRole
-from canvasgrade.sheet import detect_mapping, parse_points, read_sheet, strip_points
+from canvasgrade.sheet import (
+    detect_mapping,
+    parse_points,
+    promote_all_to_criteria,
+    read_sheet,
+    strip_points,
+)
 from canvasgrade.sheet.rows import to_float, to_int
 from canvasgrade.sheet.select import filter_criteria
 
@@ -203,6 +209,101 @@ class TestDetection:
         mapping = detect_mapping(frame)
         assert {c.name for c in mapping.criteria_columns} == {"Quiz", "Essay"}
         assert mapping.get("Quiz").points == 9
+
+    @pytest.mark.parametrize(
+        ("header", "expected"),
+        [
+            ("Weight (1)", ColumnRole.RATIO),
+            ("Ratio (1)", ColumnRole.RATIO),
+            ("系数 (1)", ColumnRole.RATIO),
+            ("Team [5]", ColumnRole.TEAM),
+            ("Group (5)", ColumnRole.TEAM),
+        ],
+    )
+    def test_a_header_that_is_only_a_role_name_keeps_that_role(self, header, expected) -> None:
+        # "Weight (1)" is the ratio column with its scale spelled out, not a criterion
+        # worth one point. Reading it as a criterion put a multiplier in the rubric.
+        import pandas as pd
+
+        frame = pd.DataFrame({"ID": [1], "Design (10)": [8], header: [1]})
+        mapping = detect_mapping(frame)
+        assert mapping.get(header).role is expected
+        assert mapping.get(header).points is None
+
+    @pytest.mark.parametrize(
+        "header",
+        ["Bug reports (team) [5]", "Factor analysis (10)", "Weighting scheme (10)", "Group work [10]"],
+    )
+    def test_a_role_keyword_inside_a_longer_header_is_still_a_criterion(self, header) -> None:
+        # The whole-header rule above must not resurrect the bug it replaced: a
+        # criterion that merely mentions a team or a weight is still a criterion.
+        import pandas as pd
+
+        frame = pd.DataFrame({"ID": [1], header: [4]})
+        assert detect_mapping(frame).get(header).role is ColumnRole.CRITERION
+
+    def test_a_total_keyword_still_matches_anywhere_in_the_header(self) -> None:
+        # Totals keep substring matching: "M1 Total (30)" is never a criterion.
+        import pandas as pd
+
+        frame = pd.DataFrame({"ID": [1], "Design (10)": [8], "M1 Total (30)": [8]})
+        assert detect_mapping(frame).get("M1 Total (30)").role is ColumnRole.TOTAL
+
+
+class TestPromoteAllToCriteria:
+    """`--all-criteria`: everything that can hold a score becomes a criterion."""
+
+    @pytest.fixture
+    def frame(self):
+        import pandas as pd
+
+        return pd.DataFrame(
+            {
+                "Student": ["Ada", "Alan"],
+                "ID": [101, 102],
+                "Design (10)": [8, 9],
+                "Deduction": [-2, 0],
+                "Late": [0, 0],
+                "Quiz": [4, 7],
+                "Ratio": [1.0, 0.9],
+                "Grader": ["AB", "CD"],
+                "Total (30)": [10, 16],
+            }
+        )
+
+    @pytest.fixture
+    def promoted(self, frame):
+        return promote_all_to_criteria(frame, detect_mapping(frame))
+
+    def test_identity_and_total_columns_are_left_alone(self, promoted) -> None:
+        assert promoted.get("Student").role is ColumnRole.NAME
+        assert promoted.get("ID").role is ColumnRole.CANVAS_ID
+        # Scoring the total as a criterion would count every mark twice.
+        assert promoted.get("Total (30)").role is ColumnRole.TOTAL
+
+    def test_a_declared_max_is_kept(self, promoted) -> None:
+        assert promoted.get("Design (10)").points == 10
+
+    def test_a_bare_numeric_column_gets_its_max_from_the_data(self, promoted) -> None:
+        column = promoted.get("Quiz")
+        assert column.role is ColumnRole.CRITERION
+        assert column.points == 7
+
+    def test_a_column_with_no_positive_value_is_read_as_a_deduction(self, promoted) -> None:
+        # A deduction column holds 0 and negatives, so its max really is 0.
+        for name in ("Deduction", "Late"):
+            assert promoted.get(name).role is ColumnRole.CRITERION, name
+            assert promoted.get(name).points == 0, name
+
+    def test_the_ratio_column_is_promoted_too(self, promoted) -> None:
+        assert promoted.get("Ratio").role is ColumnRole.CRITERION
+
+    def test_a_column_that_holds_no_numbers_is_skipped(self, promoted) -> None:
+        # Grader initials cannot be a score however hard we try.
+        assert promoted.get("Grader").role is ColumnRole.IGNORE
+
+    def test_every_promoted_column_still_explains_itself(self, promoted) -> None:
+        assert all(column.reason for column in promoted.columns)
 
 
 class TestRows:

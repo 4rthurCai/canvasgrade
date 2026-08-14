@@ -27,7 +27,7 @@ from canvasgrade.models import (
     SheetMapping,
     StudentRow,
 )
-from canvasgrade.sheet.detect import detect_mapping
+from canvasgrade.sheet.detect import detect_mapping, promote_all_to_criteria
 from canvasgrade.sheet.reader import SheetData, read_sheet
 from canvasgrade.sheet.rows import extract_rows
 from canvasgrade.sheet.select import filter_criteria
@@ -59,6 +59,9 @@ class SheetRequest:
     has_header: bool = True
     include: tuple[str, ...] = ()
     exclude: tuple[str, ...] = ()
+    #: Make every column that can hold a score a criterion, instead of only those whose
+    #: header declares a max. Applied before ``overrides``, so a hand-set role wins.
+    all_criteria: bool = False
     #: Applied after detection and before filtering, so the GUI can correct a guess.
     overrides: tuple[ColumnOverride, ...] = ()
     #: Name of the column holding the assignment total, when the detector's choice is
@@ -115,6 +118,8 @@ def load_sheet(request: SheetRequest) -> PreparedSheet:
     """Read a spreadsheet and infer everything we can without touching the network."""
     data = read_sheet(request.path, sheet=request.sheet, has_header=request.has_header)
     mapping = detect_mapping(data.frame, has_header=request.has_header)
+    if request.all_criteria:
+        mapping = promote_all_to_criteria(data.frame, mapping)
     for override in request.overrides:
         mapping = mapping.override(
             override.name,

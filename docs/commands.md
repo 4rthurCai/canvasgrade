@@ -42,6 +42,8 @@ be built from it — criterion names, maxima and the total.
 | `--id-column NAME` | which column holds the Canvas user id |
 | `--total-column NAME` | which column holds the assignment total |
 | `--rename COLUMN=NAME` | criterion name students will see; repeatable |
+| `--criterion COLUMN[=MAX]` | force a column into the rubric; repeatable |
+| `--all-criteria` | put every column that can hold a score in the rubric |
 | `--columns-only` | skip the rubric preview |
 
 ---
@@ -71,6 +73,31 @@ Combining them is refused rather than silently ranked.
 | `--use-for-grading` | let Canvas recompute the grade from the rubric total — **off by default**, since it would overwrite your sheet's total |
 | `--rename COLUMN=NAME` | criterion name students see; repeatable |
 | `--describe COLUMN=TEXT` | detail Canvas shows when a student opens that criterion; repeatable |
+
+**Which columns are criteria**
+
+Only a header that declares a maximum — `Design (10)` — becomes a criterion, so penalty,
+bonus and bookkeeping columns stay out of the rubric by default. These two put them back:
+
+| Option | Meaning |
+|---|---|
+| `--criterion COLUMN[=MAX]` | force one column into the rubric; repeatable |
+| `--all-criteria` | force every column that can hold a score |
+
+`--criterion 'Deduction=0'` gives a penalty column a maximum of 0 — the scores in it are
+what go below zero, and a negative maximum is refused. Omit the `=MAX` and the maximum
+comes from the header if it has one (`--criterion 'M1 Total (30)'`), otherwise you are
+asked for one.
+
+`--all-criteria` takes every column with a number in it: maxima come from the header
+where declared and from the largest value in the column otherwise, and a column holding
+only zeroes and negatives is read as a deduction worth 0. Identity columns, the total and
+comment columns are never swept up — scoring the total would count every mark twice — and
+a column holding no numbers at all is skipped. The ratio column *is* swept up, so
+`--all-criteria` and `--apply-ratio` are refused together.
+
+Both are applied before `-I/--include` and `-E/--exclude`, and `--criterion` overrides a
+maximum `--all-criteria` inferred.
 
 **Where the total comes from**
 

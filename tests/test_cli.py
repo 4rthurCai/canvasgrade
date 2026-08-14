@@ -49,6 +49,87 @@ class TestInspect:
         assert not isinstance(result.exception, AttributeError)
 
 
+@pytest.fixture
+def deductions_path(tmp_path):
+    """A sheet whose penalty columns declare no max, so nothing detects them."""
+    path = tmp_path / "deductions.csv"
+    path.write_text(
+        "Student,ID,Design (10),Deduction,Late,Grader\nAda Lovelace,101,8,-2,0,AB\nAlan Turing,102,9,0,-1,AB\n",
+        encoding="utf-8",
+    )
+    return path
+
+
+class TestForcedCriteria:
+    """`--criterion` for one column, `--all-criteria` for the lot."""
+
+    def test_criterion_promotes_a_column_the_detector_ignored(self, runner, deductions_path) -> None:
+        result = runner.invoke(cli.main, ["inspect", str(deductions_path), "--criterion", "Deduction=0"])
+        assert result.exit_code == 0, result.output
+        assert "2 criteria" in result.output
+
+    def test_criterion_takes_the_max_from_the_header_when_none_is_given(self, runner, gradebook_path) -> None:
+        # "M1 Total (30)" is ignored as a subtotal, but its max is right there.
+        result = runner.invoke(cli.main, ["inspect", str(gradebook_path), "--criterion", "M1 Total (30)"])
+        assert result.exit_code == 0, result.output
+        assert "5 criteria" in result.output
+
+    def test_criterion_without_a_max_anywhere_says_how_to_give_one(self, runner, deductions_path) -> None:
+        result = runner.invoke(cli.main, ["inspect", str(deductions_path), "--criterion", "Deduction"])
+        assert result.exit_code != 0
+        assert "Deduction=10" in result.output
+
+    def test_criterion_names_the_real_columns_when_the_name_is_wrong(self, runner, deductions_path) -> None:
+        result = runner.invoke(cli.main, ["inspect", str(deductions_path), "--criterion", "Nope=5"])
+        assert result.exit_code != 0
+        assert "'Deduction'" in result.output
+
+    def test_criterion_rejects_a_max_that_is_not_a_number(self, runner, deductions_path) -> None:
+        result = runner.invoke(cli.main, ["inspect", str(deductions_path), "--criterion", "Deduction=lots"])
+        assert result.exit_code != 0
+        assert "not a number" in result.output
+
+    def test_criterion_rejects_a_negative_max(self, runner, deductions_path) -> None:
+        # A deduction column's max is 0, not -5; the scores are what go negative.
+        result = runner.invoke(cli.main, ["inspect", str(deductions_path), "--criterion", "Deduction=-5"])
+        assert result.exit_code != 0
+        assert "cannot be negative" in result.output
+
+    def test_all_criteria_sweeps_up_every_scorable_column(self, runner, deductions_path) -> None:
+        result = runner.invoke(cli.main, ["inspect", str(deductions_path), "--all-criteria"])
+        assert result.exit_code == 0, result.output
+        assert "3 criteria" in result.output  # Design, Deduction, Late - but not Grader
+
+    def test_all_criteria_leaves_identity_columns_alone(self, runner, deductions_path) -> None:
+        result = runner.invoke(cli.main, ["inspect", str(deductions_path), "--all-criteria"])
+        assert "canvas_id" in result.output
+        assert "name" in result.output
+
+    def test_criterion_overrides_the_max_all_criteria_inferred(self, runner, deductions_path) -> None:
+        result = runner.invoke(
+            cli.main,
+            ["inspect", str(deductions_path), "--all-criteria", "--criterion", "Late=5"],
+        )
+        assert result.exit_code == 0, result.output
+        assert "3 criteria worth 15 points" in result.output  # 10 + 0 + 5, not 10 + 0 + 0
+
+    def test_all_criteria_reaches_the_rubric_on_push(self, runner, deductions_path, offline) -> None:
+        result = runner.invoke(
+            cli.main,
+            ["push", str(deductions_path), "-c", "786", "-a", "7081", "--create-rubric", "--all-criteria", "-n"],
+        )
+        assert result.exit_code == 0, result.output
+        assert "Deduction" in result.output
+
+    def test_all_criteria_and_apply_ratio_contradict_each_other(self, runner, gradebook_path, offline) -> None:
+        result = runner.invoke(
+            cli.main,
+            ["push", str(gradebook_path), "-c", "786", "-a", "7081", "--all-criteria", "--apply-ratio", "-n"],
+        )
+        assert result.exit_code != 0
+        assert "--apply-ratio" in result.output
+
+
 class TestPush:
     def _args(self, path, *extra: str) -> list[str]:
         return [
